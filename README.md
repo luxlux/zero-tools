@@ -5,6 +5,7 @@
 Die Erweiterung ist im Chrome Webstore zu finden. Hier liegen meine Entwicklungsdaten.
 
 Sie hat folgende Funktionen:
+- Massendownload von Dokumenten
 - Einfache Festlegung von Limits für Orders per Klick
 - Anzeige von Latenzzeiten bei der Kursanzeige von Derivaten (um zwischenzeitliche Preisänderungen besser abschätzen zu können)
 
