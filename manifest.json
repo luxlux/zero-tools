@@ -4,7 +4,8 @@
   "version": "1.0",
   "description": "Inoffizielle Erweiterung für finanzen.net zero. Zeigt Latenzen und hilft bei der Order-Eingabe.",
   "permissions": [
-    "storage"
+    "storage",
+    "downloads"
   ],
   "host_permissions": [
     "https://*.finanzen.net/*",
@@ -27,6 +28,7 @@
         "https://mein.finanzen-zero.net/*"
       ],
       "js": [
+        "jszip.min.js",
         "content.js"
       ],
       "css": [

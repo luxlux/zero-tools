@@ -23,6 +23,9 @@ interface Settings {
   limitAdjusterEnabled: boolean;
   // Sub-feature: Confirm Page
   confirmPageEnabled: boolean;
+  // Feature 3: Postbox Downloader
+  postboxDownloaderEnabled: boolean;
+  postboxFilenameMode: 'original' | 'display';
 }
 
 // Assuming there's a translations object that was omitted from the provided content
@@ -45,9 +48,11 @@ const defaultSettings: Settings = {
   featureTwoEnabled: false,
   autoCheckEnabled: false,
   offsetButtonsEnabled: false,
-  customOffsets: '0.1, 0.5, 1.0',
+  customOffsets: '0,1%; 0,2%; 0,5%; 1,0%',
   limitAdjusterEnabled: true,
   confirmPageEnabled: false,
+  postboxDownloaderEnabled: true,
+  postboxFilenameMode: 'display',
 };
 
 const App: React.FC = () => {
@@ -312,6 +317,48 @@ const App: React.FC = () => {
                     />
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Feature 3: Postbox Downloader */}
+        <div className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${settings.postboxDownloaderEnabled ? 'border-green-200 ring-1 ring-green-100' : 'border-slate-200 grayscale-[0.5]'}`}>
+          <div className="p-3 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-2">
+              <div className={`p-1.5 rounded-lg ${settings.postboxDownloaderEnabled ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'}`}>
+                <Save className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Posteingang</h3>
+                <p className="text-[10px] text-slate-500">PDF Massen-Download</p>
+              </div>
+            </div>
+            <button
+              onClick={() => updateSettings({ ...settings, postboxDownloaderEnabled: !settings.postboxDownloaderEnabled })}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${settings.postboxDownloaderEnabled ? 'bg-green-500' : 'bg-slate-300'}`}
+            >
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${settings.postboxDownloaderEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+
+          {settings.postboxDownloaderEnabled && (
+            <div className="p-3 bg-white border-t border-slate-100 animate-fade-in">
+              <div className="flex items-start gap-2 mb-3 text-[11px] text-slate-600">
+                <Info className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" />
+                <p title="Lädt alle aufgelisteten PDFs als ZIP-Archiv mit Dateidatum laut Liste herunter.">Lädt alle aufgelisteten PDFs als ZIP-Archiv mit Dateidatum laut Liste herunter.</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Dateinamen</label>
+                <select
+                  value={settings.postboxFilenameMode}
+                  onChange={(e) => updateSettings({ ...settings, postboxFilenameMode: e.target.value as 'original' | 'display' })}
+                  className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-green-200 focus:border-green-400 outline-none"
+                >
+                  <option value="original">Original (vom Server)</option>
+                  <option value="display">Datum + Angezeigter Titel</option>
+                </select>
               </div>
             </div>
           )}

@@ -16,10 +16,10 @@ const copyAssets = () => {
       const manifestPath = resolve(__dirname, 'manifest.json');
       if (fs.existsSync(manifestPath)) {
         const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-        
+
         // Point to the built files in dist
         manifest.action.default_popup = 'src/popup/index.html';
-        manifest.content_scripts[0].js = ['content.js'];
+        manifest.content_scripts[0].js = ['jszip.min.js', 'content.js'];
         manifest.content_scripts[0].css = ['content.css'];
 
         if (!fs.existsSync('dist')) fs.mkdirSync('dist');
@@ -42,7 +42,7 @@ const copyAssets = () => {
           const destFile = resolve('dist', file);
           // Ensure we are copying files, not directories (simplification)
           if (fs.lstatSync(srcFile).isFile()) {
-             fs.copyFileSync(srcFile, destFile);
+            fs.copyFileSync(srcFile, destFile);
           }
         });
       }

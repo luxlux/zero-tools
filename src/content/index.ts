@@ -13,6 +13,8 @@ interface Settings {
   customOffsets: string;
   limitAdjusterEnabled: boolean;
   confirmPageEnabled: boolean;
+  postboxDownloaderEnabled: boolean;
+  postboxFilenameMode: 'original' | 'display';
 }
 
 let settings: Settings = {
@@ -23,9 +25,11 @@ let settings: Settings = {
   featureTwoEnabled: false,
   autoCheckEnabled: false,
   offsetButtonsEnabled: false,
-  customOffsets: '0.1, 0.5, 1.0',
+  customOffsets: '0,1%; 0,2%; 0,5%; 1,0%',
   limitAdjusterEnabled: false,
   confirmPageEnabled: false,
+  postboxDownloaderEnabled: true,
+  postboxFilenameMode: 'display',
 };
 
 // Load settings on startup
@@ -1135,3 +1139,196 @@ setInterval(processTimestamps, 1000);
 
 // Run immediately on load
 processTimestamps();
+// ========== POSTBOX DOWNLOADER ====================
+// Inlined to avoid ES6 module issues
+declare const JSZip: any;
+
+interface DocItem {
+  id: string;
+  title: string;
+  date: string;
+  url: string;
+  isNew: boolean;
+  element: HTMLElement;
+}
+
+const initPostboxDownloader = (enabled: boolean) => {
+  if (!enabled) return;
+  if (!window.location.href.includes('/posteingang')) return;
+
+  setInterval(() => {
+    const table = document.querySelector('table.table-post');
+    const controls = document.getElementById('zd-postbox-controls');
+    if (table && !controls) {
+      const container = table.closest('.inbox');
+      if (!container) return;
+
+      const div = document.createElement('div');
+      div.id = 'zd-postbox-controls';
+      div.className = 'd-flex justify-content-end mb-2';
+      div.style.cssText = 'gap:10px;padding:10px;background:#f8f9fa;border-radius:5px;border:1px solid #dee2e6';
+
+      const btnAll = document.createElement('button');
+      btnAll.textContent = 'Alle angezeigten laden (ZIP)';
+      btnAll.style.cssText = 'padding:8px 16px;background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer;transition:all 0.2s';
+      btnAll.onmouseover = () => btnAll.style.background = '#c7d2fe';
+      btnAll.onmouseout = () => btnAll.style.background = '#e0e7ff';
+      btnAll.onclick = () => downloadDocs(false);
+
+      const btnNew = document.createElement('button');
+      btnNew.textContent = 'Nur UNGELESENE laden (ZIP)';
+      btnNew.style.cssText = 'padding:8px 16px;background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer;transition:all 0.2s';
+      btnNew.onmouseover = () => btnNew.style.background = '#c7d2fe';
+      btnNew.onmouseout = () => btnNew.style.background = '#e0e7ff';
+      btnNew.onclick = () => downloadDocs(true);
+
+      div.appendChild(btnAll);
+      div.appendChild(btnNew);
+      container.insertAdjacentElement('beforebegin', div);
+    }
+  }, 1000);
+};
+
+const downloadDocs = async (onlyNew: boolean) => {
+  const rows = document.querySelectorAll('table.table-post tbody tr');
+  const docs: DocItem[] = [];
+
+  rows.forEach(row => {
+    const linkEl = row.querySelector('a[href*="/doc/"]');
+    if (!linkEl) return;
+    const url = linkEl.getAttribute('href');
+    if (!url) return;
+
+    const title = linkEl.textContent?.trim() || 'Dokument';
+    const isNew = linkEl.classList.contains('p-base-bold');
+    const dateCell = row.querySelectorAll('td')[1];
+    const dateText = dateCell?.textContent?.replace('Datum', '').trim() || '';
+    const idMatch = url.match(/\/doc\/(\d+)\//);
+    const id = idMatch ? idMatch[1] : Math.random().toString(36).substr(2, 9);
+
+    docs.push({
+      id,
+      title,
+      date: dateText,
+      url: url.startsWith('http') ? url : `https://mein.finanzen-zero.net${url}`,
+      isNew,
+      element: row as HTMLElement
+    });
+  });
+
+  const toDownload = onlyNew ? docs.filter(d => d.isNew) : docs;
+  if (toDownload.length === 0) return alert('Keine Dokumente gefunden.');
+  if (!confirm(`${toDownload.length} Dokumente als ZIP herunterladen?`)) return;
+
+  const zip = new JSZip();
+  const status = document.createElement('div');
+  status.style.cssText = 'position:fixed;top:20px;right:20px;background:#248eff;color:white;padding:15px;border-radius:5px;z-index:9999;box-shadow:0 4px 6px rgba(0,0,0,0.1)';
+  status.textContent = `Lade 0/${toDownload.length}...`;
+  document.body.appendChild(status);
+
+  // Track filenames to handle duplicates
+  const filenameCount: { [key: string]: number } = {};
+  // Track time offsets per date for display mode
+  const dateTimeOffsets: { [key: string]: number } = {};
+
+  let count = 0;
+  for (const doc of toDownload) {
+    try {
+      const response = await fetch(doc.url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+
+      let filename = '';
+      const useDisplayMode = settings.postboxFilenameMode === 'display';
+
+      if (useDisplayMode) {
+        // Display mode: date prefix + title
+        const [day, month, year] = doc.date.split('.');
+        const datePrefix = `${year}-${month}-${day}`;
+        const cleanTitle = doc.title.replace(/[^a-zA-Z0-9äöüÄÖÜß \-_]/g, '').trim();
+        filename = `${datePrefix}_${cleanTitle}.pdf`;
+      } else {
+        // Original mode: extract from headers or URL
+        const contentDisp = response.headers.get('Content-Disposition');
+        if (contentDisp) {
+          const match = contentDisp.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+          if (match && match[1]) filename = match[1].replace(/['"]/g, '');
+        }
+        if (!filename) {
+          const urlParts = doc.url.split('/');
+          filename = urlParts[urlParts.length - 1] || `doc_${doc.id}.pdf`;
+        }
+      }
+
+      // Handle duplicate filenames
+      if (filenameCount[filename]) {
+        const base = filename.replace(/\.pdf$/i, '');
+        const ext = '.pdf';
+        filenameCount[filename]++;
+        filename = `${base}_${filenameCount[filename]}${ext}`;
+      } else {
+        filenameCount[filename] = 1;
+      }
+
+      // Parse date from table (DD.MM.YYYY)
+      const [day, month, year] = doc.date.split('.');
+      const dateKey = `${year}-${month}-${day}`;
+
+      // Initialize time offset for this date if not exists
+      if (!dateTimeOffsets[dateKey]) {
+        dateTimeOffsets[dateKey] = 0;
+      }
+
+      // Create file date with time offset
+      // Set to noon (12:00) to avoid timezone issues
+      // Newest files (top of list) get earliest time: 12:00
+      // Each subsequent file on same day increments by 1 minute: 12:01, 12:02, etc.
+      const minutesOffset = dateTimeOffsets[dateKey];
+      const fileDate = new Date(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+        12,  // Hour: 12 (noon)
+        0 + minutesOffset,  // Minutes: start at 0, increment
+        0,   // Seconds
+        0    // Milliseconds
+      );
+
+      dateTimeOffsets[dateKey]++;
+
+      zip.file(filename, blob, { date: fileDate });
+      count++;
+      status.textContent = `Lade ${count}/${toDownload.length}...`;
+      await new Promise(r => setTimeout(r, 100));
+    } catch (e) {
+      console.error('Error:', e);
+    }
+  }
+
+  status.textContent = 'Erstelle ZIP...';
+  try {
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const zipName = `Zero-Posteingang_Download_vom_${new Date().toISOString().split('T')[0]}.zip`;
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = zipName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    status.style.background = '#28a745';
+    status.textContent = `✓ ${count} Dateien heruntergeladen!`;
+    setTimeout(() => document.body.removeChild(status), 3000);
+  } catch (e) {
+    status.style.background = '#dc3545';
+    status.textContent = '✗ Fehler beim Erstellen';
+    setTimeout(() => document.body.removeChild(status), 5000);
+  }
+};
+
+// Initialize at end of script
+setTimeout(() => {
+  initPostboxDownloader(settings.postboxDownloaderEnabled);
+}, 1000);
