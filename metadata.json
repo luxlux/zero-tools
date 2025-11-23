@@ -1,5 +1,5 @@
 {
-  "name": "Broker Latency Checker",
-  "description": "A Chrome extension to monitor data lag on Finanzen.net Zero by comparing displayed quote timestamps with local system time.",
+  "name": "Unofficial zero Tools",
+  "description": "Inoffizielle Erweiterung für finanzen.net zero. Massendownload von Dokumenten, zeigt Latenzen und hilft bei Limit-Order-Eingabe.",
   "requestFramePermissions": []
 }

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Unofficial zero Tools",
   "version": "1.0",
-  "description": "Inoffizielle Erweiterung für finanzen.net zero. Zeigt Latenzen und hilft bei der Order-Eingabe.",
+  "description": "Inoffizielle Erweiterung für finanzen.net zero. Massendownload von Dokumenten, zeigt Latenzen und hilft bei Limit-Order-Eingabe.",
   "permissions": [
     "storage",
     "downloads"
