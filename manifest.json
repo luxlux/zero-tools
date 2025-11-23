@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Unofficial zero Tools",
+  "version": "1.0",
+  "description": "Inoffizielle Erweiterung für finanzen.net zero. Zeigt Latenzen und hilft bei der Order-Eingabe.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.finanzen.net/*",
+    "https://*.finanzen-zero.net/*",
+    "https://mein.finanzen-zero.net/*"
+  ],
+  "icons": {
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  },
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_icon": "icon-48.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.finanzen.net/*",
+        "https://*.finanzen-zero.net/*",
+        "https://mein.finanzen-zero.net/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ]
+    }
+  ]
+}
