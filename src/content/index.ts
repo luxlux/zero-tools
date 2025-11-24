@@ -1217,13 +1217,14 @@ const expandAllDocs = async () => {
     // Check if link is hidden (all docs visible) or doesn't exist
     if (!moreLink || moreLink.classList.contains('hidden')) {
       status.style.background = '#10b981';
-      status.textContent = `✓ Alle ${document.querySelectorAll('table.table-post tbody tr').length} Dokumente angezeigt!`;
+      const count = document.querySelectorAll('table.table-post tbody tr a[href*="/doc/"]').length;
+      status.textContent = `✓ Alle ${count} Dokumente angezeigt!`;
       setTimeout(() => document.body.removeChild(status), 3000);
       return;
     }
 
     clickCount++;
-    const visibleCount = document.querySelectorAll('table.table-post tbody tr').length;
+    const visibleCount = document.querySelectorAll('table.table-post tbody tr a[href*="/doc/"]').length;
     status.textContent = `${visibleCount} Dokumente sichtbar... (${clickCount} Klicks)`;
 
     moreLink.click();
