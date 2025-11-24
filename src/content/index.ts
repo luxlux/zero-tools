@@ -13,6 +13,7 @@ interface Settings {
   customOffsets: string;
   limitAdjusterEnabled: boolean;
   confirmPageEnabled: boolean;
+  confirmPagePerformanceInfoEnabled: boolean;
   postboxDownloaderEnabled: boolean;
   postboxFilenameMode: 'original' | 'display';
 }
@@ -28,6 +29,7 @@ let settings: Settings = {
   customOffsets: '0,1%; 0,2%; 0,5%; 1,0%',
   limitAdjusterEnabled: false,
   confirmPageEnabled: false,
+  confirmPagePerformanceInfoEnabled: false,
   postboxDownloaderEnabled: true,
   postboxFilenameMode: 'display',
 };
@@ -466,6 +468,9 @@ const waitForElement = (selector: string, timeout: number): Promise<Element | nu
   });
 };
 
+// Global tooltip update interval
+let tooltipUpdateInterval: number | null = null;
+
 const injectLimitButtons = () => {
   injectStyles();
 
@@ -506,7 +511,48 @@ const injectLimitButtons = () => {
     singlePriceStr = extractPrice(singleNode.textContent || '');
   }
 
-  const currentState = {
+  // Separate structural state from price state
+  const structuralState = {
+    hasBid: !!(bidPriceStr && !isNaN(parseFloat(bidPriceStr))),
+    hasAsk: !!(askPriceStr && !isNaN(parseFloat(askPriceStr))),
+    hasSingle: !!(singlePriceStr && !isNaN(parseFloat(singlePriceStr))),
+    autoCheck: settings.autoCheckEnabled,
+    offsetEnabled: settings.offsetButtonsEnabled,
+    offsets: settings.customOffsets
+  };
+
+  let controls = container.querySelector('.zero-delay-limit-controls') as HTMLElement;
+
+  // If controls exist, check if we only need to update prices
+  if (controls) {
+    const currentStructure = {
+      hasBid: controls.getAttribute('data-has-bid') === 'true',
+      hasAsk: controls.getAttribute('data-has-ask') === 'true',
+      hasSingle: controls.getAttribute('data-has-single') === 'true',
+      autoCheck: controls.getAttribute('data-auto-check') === 'true',
+      offsetEnabled: controls.getAttribute('data-offset-enabled') === 'true',
+      offsets: controls.getAttribute('data-offsets') || ''
+    };
+
+    // If only prices changed, just update data attributes and return
+    if (
+      structuralState.hasBid === currentStructure.hasBid &&
+      structuralState.hasAsk === currentStructure.hasAsk &&
+      structuralState.hasSingle === currentStructure.hasSingle &&
+      structuralState.autoCheck === currentStructure.autoCheck &&
+      structuralState.offsetEnabled === currentStructure.offsetEnabled &&
+      structuralState.offsets === currentStructure.offsets
+    ) {
+      // Just update price data
+      if (bidPriceStr) controls.setAttribute('data-bid', bidPriceStr);
+      if (askPriceStr) controls.setAttribute('data-ask', askPriceStr);
+      if (singlePriceStr) controls.setAttribute('data-single', singlePriceStr);
+      return;
+    }
+  }
+
+  // Structural change or first render - recreate buttons
+  lastState = {
     bid: bidPriceStr || '',
     ask: askPriceStr || '',
     single: singlePriceStr || '',
@@ -515,24 +561,9 @@ const injectLimitButtons = () => {
     offsets: settings.customOffsets
   };
 
-  if (
-    currentState.bid === lastState.bid &&
-    currentState.ask === lastState.ask &&
-    currentState.single === lastState.single &&
-    currentState.autoCheck === lastState.autoCheck &&
-    currentState.offsetEnabled === lastState.offsetEnabled &&
-    currentState.offsets === lastState.offsets &&
-    container.querySelector('.zero-delay-limit-controls')
-  ) {
-    return;
-  }
-
-  lastState = currentState;
-
-  // Cleanup old containers if they exist
+  // Cleanup old containers
   container.querySelector('.zero-delay-offset-controls')?.remove();
 
-  let controls = container.querySelector('.zero-delay-limit-controls') as HTMLElement;
   if (!controls) {
     controls = document.createElement('div');
     controls.className = 'zero-delay-limit-controls d-flex justify-content-end align-items-start mt-0 mb-2';
@@ -546,15 +577,57 @@ const injectLimitButtons = () => {
     }
   } else {
     controls.innerHTML = '';
-    controls.className = 'zero-delay-limit-controls d-flex justify-content-end align-items-start mt-0 mb-2';
-    controls.style.gap = '8px';
   }
 
+  // Store structural state and prices as data attributes
+  controls.setAttribute('data-has-bid', structuralState.hasBid.toString());
+  controls.setAttribute('data-has-ask', structuralState.hasAsk.toString());
+  controls.setAttribute('data-has-single', structuralState.hasSingle.toString());
+  controls.setAttribute('data-auto-check', structuralState.autoCheck.toString());
+  controls.setAttribute('data-offset-enabled', structuralState.offsetEnabled.toString());
+  controls.setAttribute('data-offsets', structuralState.offsets);
+  if (bidPriceStr) controls.setAttribute('data-bid', bidPriceStr);
+  if (askPriceStr) controls.setAttribute('data-ask', askPriceStr);
+  if (singlePriceStr) controls.setAttribute('data-single', singlePriceStr);
   const isAutoCheck = settings.autoCheckEnabled;
   let originalValue = '';
 
-  const handleTooltip = (btn: HTMLButtonElement, priceStr: string) => {
+  const handleTooltip = (btn: HTMLButtonElement, priceType: 'bid' | 'ask' | 'single', offset?: number) => {
+    const updateTooltipContent = () => {
+      const controls = btn.closest('.zero-delay-limit-controls');
+      if (!controls) return null;
+
+      let basePrice = controls.getAttribute(`data-${priceType}`);
+      if (!basePrice) return null;
+
+      let finalPrice = basePrice;
+      if (offset !== undefined) {
+        const base = parseFloat(basePrice);
+        const decimals = basePrice.indexOf('.') >= 0 ? basePrice.split('.')[1].length : 2;
+        const newPrice = base * (1 + offset / 100);
+        finalPrice = newPrice.toFixed(decimals);
+      }
+
+      return finalPrice;
+    };
+
+    const formatAndSetTooltip = (tooltip: HTMLElement, priceStr: string) => {
+      const formattedPrice = priceStr.replace('.', ',');
+      const parts = formattedPrice.split(',');
+      if (parts.length === 2 && parts[1].length > 2) {
+        const mainPart = parts[0];
+        const firstTwoDecimals = parts[1].substring(0, 2);
+        const extraDecimals = parts[1].substring(2);
+        tooltip.innerHTML = `${mainPart},${firstTwoDecimals}<span style="opacity: 0.5;">${extraDecimals}</span>`;
+      } else {
+        tooltip.textContent = formattedPrice;
+      }
+    };
+
     btn.onmouseenter = () => {
+      const priceStr = updateTooltipContent();
+      if (!priceStr) return;
+
       let tooltip = document.getElementById('zd-tooltip-el');
       if (!tooltip) {
         tooltip = document.createElement('div');
@@ -563,21 +636,17 @@ const injectLimitButtons = () => {
         document.body.appendChild(tooltip);
       }
 
-      // Format price with dimmed extra decimals
-      const formattedPrice = priceStr.replace('.', ',');
-      const parts = formattedPrice.split(',');
-
-      if (parts.length === 2 && parts[1].length > 2) {
-        // Has more than 2 decimal places - dim the extras
-        const mainPart = parts[0];
-        const firstTwoDecimals = parts[1].substring(0, 2);
-        const extraDecimals = parts[1].substring(2);
-        tooltip.innerHTML = `${mainPart},${firstTwoDecimals}<span style="opacity: 0.5;">${extraDecimals}</span>`;
-      } else {
-        tooltip.textContent = formattedPrice;
-      }
-
+      formatAndSetTooltip(tooltip, priceStr);
       tooltip.style.display = 'block';
+
+      // Clear any existing interval and start new one
+      if (tooltipUpdateInterval) clearInterval(tooltipUpdateInterval);
+      tooltipUpdateInterval = window.setInterval(() => {
+        const currentPrice = updateTooltipContent();
+        if (currentPrice && tooltip && tooltip.style.display !== 'none') {
+          formatAndSetTooltip(tooltip, currentPrice);
+        }
+      }, 100); // Update every 100ms
     };
 
     btn.onmousemove = (e) => {
@@ -593,12 +662,17 @@ const injectLimitButtons = () => {
       if (tooltip) {
         tooltip.style.display = 'none';
       }
+      if (tooltipUpdateInterval) {
+        clearInterval(tooltipUpdateInterval);
+        tooltipUpdateInterval = null;
+      }
     };
   };
 
-  const createBtn = (label: string, priceStr: string) => {
+  const createBtn = (label: string, priceType: 'bid' | 'ask' | 'single') => {
     const btn = document.createElement('button');
     btn.setAttribute('data-original-text', label);
+    btn.setAttribute('data-price-type', priceType);
 
     // Initial state
     if (isAutoCheck || isShiftHeld) {
@@ -611,7 +685,7 @@ const injectLimitButtons = () => {
     btn.className = 'zd-btn';
     btn.style.width = '100%';
 
-    handleTooltip(btn, priceStr);
+    handleTooltip(btn, priceType);
 
     btn.onclick = (e) => {
       e.preventDefault();
@@ -622,7 +696,18 @@ const injectLimitButtons = () => {
 
       btn.blur(); // Remove focus outline
 
-      setLimitValue(priceStr, isAutoCheck || e.shiftKey);
+      // Get current price from container
+      const controls = btn.closest('.zero-delay-limit-controls');
+      const priceStr = controls?.getAttribute(`data-${priceType}`);
+      if (!priceStr) return;
+
+      try {
+        if (chrome.runtime?.id) {
+          setLimitValue(priceStr, isAutoCheck || e.shiftKey);
+        }
+      } catch (err) {
+        console.warn('Zero Tools: Extension context invalidated. Please reload the page.');
+      }
     };
     return btn;
   };
@@ -632,18 +717,15 @@ const injectLimitButtons = () => {
     return str.split('.')[1].length;
   };
 
-  const createOffsetBtn = (basePriceStr: string, offset: number, isPositive: boolean) => {
-    const basePrice = parseFloat(basePriceStr);
-    const decimals = getDecimals(basePriceStr);
+  const createOffsetBtn = (priceType: 'bid' | 'ask' | 'single', offset: number, isPositive: boolean) => {
     const finalOffset = isPositive ? offset : -offset;
-    const newPrice = basePrice * (1 + finalOffset / 100);
-    const newPriceStr = newPrice.toFixed(decimals);
-
     const sign = isPositive ? '+' : '-';
     const label = `${sign}${offset.toString().replace('.', ',')}%`;
 
     const btn = document.createElement('button');
     btn.setAttribute('data-original-text', label);
+    btn.setAttribute('data-price-type', priceType);
+    btn.setAttribute('data-offset', finalOffset.toString());
 
     // Initial state
     if (isAutoCheck || isShiftHeld) {
@@ -653,7 +735,7 @@ const injectLimitButtons = () => {
 
     btn.className = 'zd-btn zd-offset-btn';
 
-    handleTooltip(btn, newPriceStr);
+    handleTooltip(btn, priceType, finalOffset);
 
     btn.onclick = (e) => {
       e.preventDefault();
@@ -664,12 +746,28 @@ const injectLimitButtons = () => {
 
       btn.blur(); // Remove focus outline
 
-      setLimitValue(newPriceStr, isAutoCheck || e.shiftKey);
+      // Get current price and calculate final price
+      const controls = btn.closest('.zero-delay-limit-controls');
+      const basePriceStr = controls?.getAttribute(`data-${priceType}`);
+      if (!basePriceStr) return;
+
+      const basePrice = parseFloat(basePriceStr);
+      const decimals = basePriceStr.indexOf('.') >= 0 ? basePriceStr.split('.')[1].length : 2;
+      const newPrice = basePrice * (1 + finalOffset / 100);
+      const newPriceStr = newPrice.toFixed(decimals);
+
+      try {
+        if (chrome.runtime?.id) {
+          setLimitValue(newPriceStr, isAutoCheck || e.shiftKey);
+        }
+      } catch (err) {
+        console.warn('Zero Tools: Extension context invalidated. Please reload the page.');
+      }
     };
     return btn;
   };
 
-  const createPriceGroup = (label: string, priceStr: string) => {
+  const createPriceGroup = (label: string, priceType: 'bid' | 'ask' | 'single') => {
     const group = document.createElement('div');
     group.className = 'zd-group-col';
 
@@ -686,20 +784,20 @@ const injectLimitButtons = () => {
       const row = document.createElement('div');
       row.className = 'zd-offsets-row';
       offsets.forEach(off => {
-        row.appendChild(createOffsetBtn(priceStr, off, true));
+        row.appendChild(createOffsetBtn(priceType, off, true));
       });
       group.appendChild(row);
     }
 
     // Main Button
-    group.appendChild(createBtn(label, priceStr));
+    group.appendChild(createBtn(label, priceType));
 
     // Bottom Row (Negative)
     if (offsets.length > 0) {
       const row = document.createElement('div');
       row.className = 'zd-offsets-row';
       offsets.forEach(off => {
-        row.appendChild(createOffsetBtn(priceStr, off, false));
+        row.appendChild(createOffsetBtn(priceType, off, false));
       });
       group.appendChild(row);
     }
@@ -707,29 +805,21 @@ const injectLimitButtons = () => {
     return group;
   };
 
-  if (bidPriceStr && askPriceStr) {
-    const hasBid = !isNaN(parseFloat(bidPriceStr));
-    const hasAsk = !isNaN(parseFloat(askPriceStr));
+  if (structuralState.hasBid && structuralState.hasAsk) {
+    controls.appendChild(createPriceGroup('Bid als Limit', 'bid'));
 
-    if (hasBid) {
-      controls.appendChild(createPriceGroup('Bid als Limit', bidPriceStr));
-    }
+    const separator = document.createElement('div');
+    separator.textContent = '/';
+    separator.className = 'zd-separator';
+    controls.appendChild(separator);
 
-    if (hasBid && hasAsk) {
-      const separator = document.createElement('div');
-      separator.textContent = '/';
-      separator.className = 'zd-separator';
-      controls.appendChild(separator);
-    }
-
-    if (hasAsk) {
-      controls.appendChild(createPriceGroup('Ask als Limit', askPriceStr));
-    }
-  } else if (singlePriceStr) {
-    const hasPrice = !isNaN(parseFloat(singlePriceStr));
-    if (hasPrice) {
-      controls.appendChild(createPriceGroup('Kurs als Limit', singlePriceStr));
-    }
+    controls.appendChild(createPriceGroup('Ask als Limit', 'ask'));
+  } else if (structuralState.hasBid) {
+    controls.appendChild(createPriceGroup('Bid als Limit', 'bid'));
+  } else if (structuralState.hasAsk) {
+    controls.appendChild(createPriceGroup('Ask als Limit', 'ask'));
+  } else if (structuralState.hasSingle) {
+    controls.appendChild(createPriceGroup('Kurs als Limit', 'single'));
   }
 
   // Update UI state to ensure correct initial styling
@@ -789,15 +879,25 @@ const injectConfirmPageButtons = () => {
 
   // Convert comma to dot for calculations
   const priceStr = currentPrice.replace(',', '.');
+  const decimals = priceStr.indexOf('.') >= 0 ? priceStr.split('.')[1].length : 2;
 
   // Check if we already injected buttons
   let controls = confirmPage.querySelector('.zero-delay-confirm-controls') as HTMLElement;
-  if (controls) return; // Already injected
+
+  // ALWAYS update the current price on the controls container
+  if (controls) {
+    controls.setAttribute('data-current-price', priceStr);
+    controls.setAttribute('data-decimals', decimals.toString());
+    return;
+  }
 
   // Create container
   controls = document.createElement('div');
   controls.className = 'zero-delay-confirm-controls d-flex flex-column align-items-end mt-3 mb-3';
   controls.style.gap = '8px';
+  // Set initial price data
+  controls.setAttribute('data-current-price', priceStr);
+  controls.setAttribute('data-decimals', decimals.toString());
 
   // Header
   const header = document.createElement('div');
@@ -810,7 +910,6 @@ const injectConfirmPageButtons = () => {
   group.className = 'zd-price-group';
 
   const basePrice = parseFloat(priceStr);
-  const decimals = priceStr.indexOf('.') >= 0 ? priceStr.split('.')[1].length : 2;
 
   // Offset buttons
   if (settings.offsetButtonsEnabled) {
@@ -825,10 +924,8 @@ const injectConfirmPageButtons = () => {
       topRow.className = 'zd-offsets-row';
 
       uniqueOffsets.forEach(offset => {
-        const newPrice = basePrice * (1 + offset / 100);
-        const newPriceStr = newPrice.toFixed(decimals);
         const label = `+${offset.toString().replace('.', ',')}%`;
-        topRow.appendChild(createConfirmOffsetBtn(label, newPriceStr));
+        topRow.appendChild(createConfirmOffsetBtn(label, offset));
       });
 
       group.appendChild(topRow);
@@ -838,7 +935,7 @@ const injectConfirmPageButtons = () => {
   // Main Button
   // Dynamic label based on direction
   const mainButtonLabel = isBuy ? 'Ask als Limit' : 'Bid als Limit';
-  group.appendChild(createConfirmBtn(mainButtonLabel, priceStr));
+  group.appendChild(createConfirmBtn(mainButtonLabel, 0));
 
   // Offset buttons
   if (settings.offsetButtonsEnabled) {
@@ -853,10 +950,8 @@ const injectConfirmPageButtons = () => {
       bottomRow.className = 'zd-offsets-row';
 
       uniqueOffsets.forEach(offset => {
-        const newPrice = basePrice * (1 - offset / 100);
-        const newPriceStr = newPrice.toFixed(decimals);
         const label = `-${offset.toString().replace('.', ',')}%`;
-        bottomRow.appendChild(createConfirmOffsetBtn(label, newPriceStr));
+        bottomRow.appendChild(createConfirmOffsetBtn(label, -offset));
       });
 
       group.appendChild(bottomRow);
@@ -879,7 +974,13 @@ const injectConfirmPageButtons = () => {
       marketBtn.blur();
 
       // Set flag for highlighting
-      chrome.storage.local.set({ 'zd_just_updated': true });
+      try {
+        if (chrome.runtime?.id) {
+          chrome.storage.local.set({ 'zd_just_updated': true });
+        }
+      } catch (e) {
+        console.warn('Zero Tools: Extension context invalidated. Please reload the page.');
+      }
 
       const backButton = document.querySelector('a[data-zid="order-mask-back"]') as HTMLElement;
       if (!backButton) return;
@@ -952,22 +1053,277 @@ const injectConfirmPageButtons = () => {
 
   controls.appendChild(group);
 
-  // Insert after the quote element
-  upperDiv.insertAdjacentElement('afterend', controls);
+  // Insert after the trade-confirm-quote element (contains Bid/Ask/Basiswert/Time)
+  const quoteElement = confirmPage.querySelector('trade-confirm-quote');
+
+  if (quoteElement) {
+    quoteElement.insertAdjacentElement('afterend', controls);
+  } else {
+    // Fallback: Search for element containing WKN (starts with DE or ISIN usually)
+    const wknElement = Array.from(confirmPage.querySelectorAll('.zero-text')).find(el =>
+      el.textContent?.trim().match(/^[A-Z]{2}[A-Z0-9]{9}\d$/) || // Strict ISIN
+      el.textContent?.includes('DE') ||
+      el.textContent?.includes('ISIN')
+    );
+
+    const timeElement = Array.from(confirmPage.querySelectorAll('.zero-text')).find(el => el.textContent?.match(/\d{1,2}:\d{2}:\d{2}/));
+
+    let targetElement = wknElement || timeElement;
+
+    if (targetElement) {
+      // Find the row container
+      let target = targetElement as HTMLElement;
+      // Go up until we find a direct child of the main container or a row
+      // We want the row that contains this element
+      while (target.parentElement && target.parentElement !== confirmPage && !target.parentElement.tagName.includes('TRADE-CONFIRM-DATA')) {
+        // If the current element is a row (d-flex justify-content-between), we stop here
+        if (target.classList.contains('d-flex') && target.classList.contains('justify-content-between')) {
+          break;
+        }
+        target = target.parentElement;
+      }
+      target.insertAdjacentElement('afterend', controls);
+    } else {
+      // Fallback
+      upperDiv.insertAdjacentElement('afterend', controls);
+    }
+  }
+
+  // Inject Position Performance Info if enabled
+  if (settings.confirmPagePerformanceInfoEnabled) {
+    // Try to find ISIN from the page
+    const wknElement = Array.from(confirmPage.querySelectorAll('.zero-text')).find(el =>
+      el.textContent?.trim().match(/^[A-Z]{2}[A-Z0-9]{9}\d$/) || // Strict ISIN
+      el.textContent?.includes('DE') ||
+      el.textContent?.includes('ISIN')
+    );
+
+    let isin = '';
+    if (wknElement) {
+      const text = wknElement.textContent?.trim() || '';
+      const match = text.match(/([A-Z]{2}[A-Z0-9]{9}\d)/);
+      if (match) isin = match[1];
+    }
+
+    if (isin) {
+      injectPositionPerformance(controls, isin);
+    }
+  }
 
   // Trigger highlighting check
   checkAndHighlightFields();
 };
 
+// Position Performance Logic
+const fetchPositionData = async (isin: string): Promise<any | null> => {
+  try {
+    // Debug logging
+    console.log('Zero Tools: Fetching position data for', isin);
+
+    // Get customer ID from URL or API links
+    // 1. Try current URL
+    let customerId = window.location.pathname.match(/\/posteingang(?:\/(\d+))?/)?.[1];
+
+    // 2. Try Postbox link in navigation (usually /posteingang/123456)
+    if (!customerId) {
+      const postboxLink = document.querySelector('a[href*="/posteingang/"]');
+      if (postboxLink) {
+        const href = postboxLink.getAttribute('href') || '';
+        customerId = href.match(/\/posteingang\/(\d+)/)?.[1];
+      }
+    }
+
+    // 3. Try API links (specifically the one user found: /api/posteingang/ID/doc/...)
+    if (!customerId) {
+      const apiLink = document.querySelector('a[href*="/api/posteingang/"]');
+      if (apiLink) {
+        const href = apiLink.getAttribute('href') || '';
+        // Match /api/posteingang/1234567/
+        const match = href.match(/\/api\/posteingang\/(\d+)\//);
+        if (match) customerId = match[1];
+      }
+    }
+
+    // 4. Try Cookie
+    if (!customerId) {
+      customerId = document.cookie.match(/customerId=(\d+)/)?.[1];
+    }
+
+    // 5. Fallback: Search for any link with a large number that looks like an ID
+    if (!customerId) {
+      // Look for links containing /depot/ or /dashboard/ which might have the ID
+      const links = Array.from(document.querySelectorAll('a[href]'));
+      for (const link of links) {
+        const href = link.getAttribute('href') || '';
+        const match = href.match(/\/(?:depot|dashboard|posteingang)\/(\d{6,})/);
+        if (match) {
+          customerId = match[1];
+          break;
+        }
+      }
+    }
+
+    if (!customerId) {
+      console.warn('Zero Tools: Customer ID not found. Cannot fetch position data.');
+      return null;
+    }
+
+    console.log('Zero Tools: Found Customer ID:', customerId);
+
+    const apiUrl = `https://mein.finanzen-zero.net/api/trading/positions?customerId=${customerId}&withProtectionInfo=true`;
+    const response = await fetch(apiUrl);
+    if (!response.ok) {
+      console.error('Zero Tools: API fetch failed', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data && data.list) {
+      const position = data.list.find((p: any) => p.isin === isin);
+      console.log('Zero Tools: Position found:', position);
+      return position || null;
+    }
+  } catch (e) {
+    console.error('Zero Tools: Error fetching position data', e);
+  }
+  return null;
+};
+
+const injectPositionPerformance = async (controlsContainer: HTMLElement, isin: string) => {
+  // Check if already injected
+  if (controlsContainer.querySelector('.zd-position-info')) return;
+
+  const position = await fetchPositionData(isin);
+  if (!position) return;
+
+  // Create info container
+  const infoDiv = document.createElement('div');
+  infoDiv.className = 'zd-position-info d-flex flex-column p-3 zero-surface grey-800 b-r-4 mt-3 mb-3';
+  infoDiv.style.marginRight = 'auto'; // Push to left if flex container allows, or just standard block
+  infoDiv.style.width = '100%';
+  infoDiv.style.fontSize = '11px';
+  infoDiv.style.border = '1px solid #e5e7eb';
+  infoDiv.style.backgroundColor = '#f9fafb';
+
+  // Calculate values
+  const quantity = position.quantity;
+  const buyPrice = position.avgEntryQuote;
+  const currentPrice = position.quote || position.avgEntryQuote; // Fallback if quote missing
+  const buyValue = quantity * buyPrice;
+  const currentValue = quantity * currentPrice;
+  const diffValue = currentValue - buyValue;
+  const diffPercent = (diffValue / buyValue) * 100;
+
+  const isPositive = diffValue >= 0;
+  const colorClass = isPositive ? 'text-green-600' : 'text-red-600';
+  const sign = isPositive ? '+' : '';
+
+  // Calculate latency if quoteTime is available
+  let latencyHtml = '';
+  if (position.quoteTime) {
+    const quoteDate = new Date(position.quoteTime);
+    const now = new Date();
+    const diffMs = now.getTime() - quoteDate.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+
+    let stateClass = 'latency-good';
+    if (diffSec >= settings.criticalThreshold) stateClass = 'latency-critical';
+    else if (diffSec >= settings.warningThreshold) stateClass = 'latency-warning';
+
+    const displayTime = diffSec > 60 ? `${Math.floor(diffSec / 60)}m ${diffSec % 60}s` : `${diffSec}s`;
+    latencyHtml = `<span class="latency-indicator ${stateClass}" style="font-size: 0.75em; padding: 0 4px; margin-left: 4px;">(${displayTime})</span>`;
+  }
+
+  // Format currency helper
+  const fmt = (n: number) => n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' €';
+
+  infoDiv.innerHTML = `
+    <div class="d-flex justify-content-between align-items-center mb-2" style="border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">
+      <span class="font-bold">Meine Position (${quantity} Stk.)</span>
+    </div>
+    <div class="d-grid" style="grid-template-columns: 1fr 1fr; gap: 8px;">
+      <div>
+        <div class="text-slate-500">Einstandskurs</div>
+        <div class="font-medium">${fmt(buyPrice)}</div>
+      </div>
+      <div>
+        <div class="text-slate-500">Aktueller Wert</div>
+        <div class="font-medium">${fmt(currentValue)}</div>
+      </div>
+      <div>
+        <div class="text-slate-500">Einstandswert</div>
+        <div class="font-medium">${fmt(buyValue)}</div>
+      </div>
+      <div>
+        <div class="text-slate-500">Performance</div>
+        <div class="font-medium ${colorClass}">${sign}${diffPercent.toFixed(2)} %</div>
+      </div>
+      <div style="grid-column: span 2;">
+        <div class="text-slate-500">Entwicklung seit Kauf</div>
+        <div class="font-medium ${colorClass}">
+          ${sign}${fmt(diffValue)} ${latencyHtml}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Insert before the controls (to the left/top depending on layout)
+  // Since controls is flex-column align-items-end, inserting before will put it on top.
+  // To put it to the left, we might need a wrapper.
+  // For now, let's insert it *before* the controls container in the parent,
+  // or inside controls but at the start?
+  // The user said "Bereich links vom Limit ändern Block".
+  // The controls container is `d-flex flex-column align-items-end`.
+  // If we want it to the left, we should probably wrap both in a flex-row container.
+
+  // Let's try to wrap controls and infoDiv in a new container
+  const parent = controlsContainer.parentElement;
+  if (parent) {
+    // Check if we already wrapped them
+    let wrapper = parent.querySelector('.zd-confirm-wrapper') as HTMLElement;
+    if (!wrapper) {
+      wrapper = document.createElement('div');
+      wrapper.className = 'zd-confirm-wrapper d-flex justify-content-between align-items-start w-100 mt-3';
+      // Move controls into wrapper
+      controlsContainer.replaceWith(wrapper);
+      wrapper.appendChild(infoDiv);
+      wrapper.appendChild(controlsContainer);
+
+      // Reset controls margins as wrapper handles spacing
+      controlsContainer.classList.remove('mt-3');
+      infoDiv.classList.remove('mt-3');
+      infoDiv.style.maxWidth = '45%'; // Limit width
+      controlsContainer.style.maxWidth = '50%';
+    } else {
+      // Wrapper exists, just append info if not there
+      if (!wrapper.querySelector('.zd-position-info')) {
+        wrapper.insertBefore(infoDiv, wrapper.firstChild);
+      }
+    }
+  }
+};
+
 // Helper functions for confirm page buttons
-const createConfirmBtn = (label: string, price: string) => {
+const getCalculatedPrice = (btn: HTMLElement, offset: number): string => {
+  const controls = btn.closest('.zero-delay-confirm-controls');
+  if (!controls) return '0';
+
+  const basePriceStr = controls.getAttribute('data-current-price') || '0';
+  const decimals = parseInt(controls.getAttribute('data-decimals') || '2');
+  const basePrice = parseFloat(basePriceStr);
+
+  const newPrice = basePrice * (1 + offset / 100);
+  return newPrice.toFixed(decimals);
+};
+
+const createConfirmBtn = (label: string, offset: number) => {
   const btn = document.createElement('button');
   btn.textContent = label;
   btn.className = 'zd-btn zd-btn-primary';
   btn.style.width = '100%';
 
   // Add tooltip
-  addTooltipToButton(btn, price);
+  addTooltipToButton(btn, offset);
 
   btn.onclick = async (e) => {
     e.preventDefault();
@@ -976,6 +1332,8 @@ const createConfirmBtn = (label: string, price: string) => {
     const tooltip = document.getElementById('zd-tooltip-el');
     if (tooltip) tooltip.style.display = 'none';
     btn.blur();
+
+    const price = getCalculatedPrice(btn, offset);
 
     const backButton = document.querySelector('a[data-zid="order-mask-back"]') as HTMLElement;
     if (!backButton) return;
@@ -994,20 +1352,26 @@ const createConfirmBtn = (label: string, price: string) => {
     }
 
     // Set flag for highlighting
-    chrome.storage.local.set({ 'zd_just_updated': true });
+    try {
+      if (chrome.runtime?.id) {
+        chrome.storage.local.set({ 'zd_just_updated': true });
+      }
+    } catch (e) {
+      console.warn('Zero Tools: Extension context invalidated. Please reload the page.');
+    }
     setLimitValue(price, true);
   };
 
   return btn;
 };
 
-const createConfirmOffsetBtn = (label: string, price: string) => {
+const createConfirmOffsetBtn = (label: string, offset: number) => {
   const btn = document.createElement('button');
   btn.textContent = label;
   btn.className = 'zd-btn zd-offset-btn zd-btn-primary';
 
   // Add tooltip
-  addTooltipToButton(btn, price);
+  addTooltipToButton(btn, offset);
 
   btn.onclick = async (e) => {
     e.preventDefault();
@@ -1016,6 +1380,8 @@ const createConfirmOffsetBtn = (label: string, price: string) => {
     const tooltip = document.getElementById('zd-tooltip-el');
     if (tooltip) tooltip.style.display = 'none';
     btn.blur();
+
+    const price = getCalculatedPrice(btn, offset);
 
     const backButton = document.querySelector('a[data-zid="order-mask-back"]') as HTMLElement;
     if (!backButton) return;
@@ -1034,23 +1400,25 @@ const createConfirmOffsetBtn = (label: string, price: string) => {
     }
 
     // Set flag for highlighting
-    chrome.storage.local.set({ 'zd_just_updated': true });
+    try {
+      if (chrome.runtime?.id) {
+        chrome.storage.local.set({ 'zd_just_updated': true });
+      }
+    } catch (e) {
+      console.warn('Zero Tools: Extension context invalidated. Please reload the page.');
+    }
     setLimitValue(price, true);
   };
 
   return btn;
 };
 
-const addTooltipToButton = (btn: HTMLButtonElement, price: string) => {
-  btn.onmouseenter = () => {
-    let tooltip = document.getElementById('zd-tooltip-el');
-    if (!tooltip) {
-      tooltip = document.createElement('div');
-      tooltip.id = 'zd-tooltip-el';
-      tooltip.className = 'zd-tooltip';
-      document.body.appendChild(tooltip);
-    }
+const addTooltipToButton = (btn: HTMLButtonElement, offset: number) => {
+  const updateTooltip = () => {
+    const tooltip = document.getElementById('zd-tooltip-el');
+    if (!tooltip || tooltip.style.display === 'none') return;
 
+    const price = getCalculatedPrice(btn, offset);
     const formattedPrice = price.replace('.', ',');
     const parts = formattedPrice.split(',');
 
@@ -1062,8 +1430,18 @@ const addTooltipToButton = (btn: HTMLButtonElement, price: string) => {
     } else {
       tooltip.textContent = formattedPrice;
     }
+  };
 
+  btn.onmouseenter = () => {
+    let tooltip = document.getElementById('zd-tooltip-el');
+    if (!tooltip) {
+      tooltip = document.createElement('div');
+      tooltip.id = 'zd-tooltip-el';
+      tooltip.className = 'zd-tooltip';
+      document.body.appendChild(tooltip);
+    }
     tooltip.style.display = 'block';
+    updateTooltip();
   };
 
   btn.onmousemove = (e) => {
@@ -1071,6 +1449,7 @@ const addTooltipToButton = (btn: HTMLButtonElement, price: string) => {
     if (tooltip) {
       tooltip.style.left = e.clientX + 'px';
       tooltip.style.top = (e.clientY - 45) + 'px';
+      updateTooltip(); // Update content on move to reflect current price
     }
   };
 
@@ -1088,7 +1467,60 @@ const processTimestamps = () => {
   }
 
   if (settings.latencyMonitorEnabled) {
-    const timeNodes = document.querySelectorAll('span[data-zid="quote-time"]');
+    let timeNodes: Element[] = Array.from(document.querySelectorAll('span[data-zid="quote-time"]'));
+
+    if (timeNodes.length === 0) {
+      // Fallback 1: Look for div.zero-text.label containing time (New structure)
+      document.querySelectorAll('div.zero-text.label').forEach(div => {
+        if (div.textContent?.match(/\d{1,2}:\d{2}:\d{2}/)) {
+          timeNodes.push(div);
+        }
+      });
+
+      // Fallback 2: Look for elements inside .has-clock-icon (Old fallback)
+      if (timeNodes.length === 0) {
+        document.querySelectorAll('.has-clock-icon span').forEach(span => {
+          if (span.textContent?.match(/\d{1,2}:\d{2}:\d{2}/)) {
+            timeNodes.push(span);
+          }
+        });
+      }
+
+      // Fallback 3: Specific check for Confirm Page (trade-confirm)
+      // Look for ANY element with time pattern in the header area
+      if (timeNodes.length === 0 && document.querySelector('trade-confirm')) {
+        const confirmHeader = document.querySelector('trade-confirm .d-flex.justify-content-between.upper');
+        if (confirmHeader) {
+          // Search within the header first
+          const walker = document.createTreeWalker(confirmHeader, NodeFilter.SHOW_TEXT);
+          let node;
+          while (node = walker.nextNode()) {
+            if (node.textContent?.match(/^\s*\d{1,2}:\d{2}:\d{2}\s*$/)) {
+              if (node.parentElement) timeNodes.push(node.parentElement);
+            }
+          }
+        }
+
+        // If still not found, search broadly in trade-confirm
+        if (timeNodes.length === 0) {
+          document.querySelectorAll('trade-confirm *').forEach(el => {
+            // Avoid matching the latency indicator itself if it exists
+            if (el.classList.contains('latency-indicator')) return;
+
+            // Check direct text content only (not children)
+            const text = Array.from(el.childNodes)
+              .filter(n => n.nodeType === Node.TEXT_NODE)
+              .map(n => n.textContent)
+              .join('');
+
+            if (text.match(/^\s*\d{1,2}:\d{2}:\d{2}\s*$/)) {
+              timeNodes.push(el);
+            }
+          });
+        }
+      }
+    }
+
     timeNodes.forEach((node) => {
       const timeStr = node.textContent?.trim();
       if (!timeStr) return;
@@ -1111,19 +1543,28 @@ const processTimestamps = () => {
         ? `${Math.floor(diffSec / 60)}m ${diffSec % 60}s`
         : `${diffSec}s`;
 
-      let indicator = node.parentElement?.querySelector('.latency-indicator') as HTMLElement;
+      let indicator = node.querySelector('.latency-indicator') as HTMLElement;
       if (!indicator) {
         indicator = document.createElement('span');
         indicator.className = 'latency-indicator';
-        indicator.style.marginLeft = '8px';
-        node.parentElement?.appendChild(indicator);
+        // Append INSIDE the node to ensure it stays on the same line if the node is a block
+        node.appendChild(indicator);
       }
 
       indicator.classList.remove('latency-good', 'latency-warning', 'latency-critical');
       indicator.classList.add(stateClass);
       indicator.innerText = `(${displayTime})`;
 
-      updatePerformanceIndicator({ stateClass, displayTime: `(${displayTime})` });
+      // Only update performance indicator if this is the BID time
+      // We check if the parent container has "Bid" text
+      const isBid = node.parentElement?.textContent?.includes('Bid') ||
+        node.parentElement?.parentElement?.textContent?.includes('Bid') ||
+        // Also check specifically for the Bid column structure if possible
+        (node.closest('.d-flex.flex-column') && node.closest('.d-flex.flex-column')?.textContent?.includes('Bid'));
+
+      if (isBid) {
+        updatePerformanceIndicator({ stateClass, displayTime: `(${displayTime})` });
+      }
     });
   } else {
     removeAllIndicators();

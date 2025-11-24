@@ -23,6 +23,7 @@ interface Settings {
   limitAdjusterEnabled: boolean;
   // Sub-feature: Confirm Page
   confirmPageEnabled: boolean;
+  confirmPagePerformanceInfoEnabled: boolean;
   // Feature 3: Postbox Downloader
   postboxDownloaderEnabled: boolean;
   postboxFilenameMode: 'original' | 'display';
@@ -51,6 +52,7 @@ const defaultSettings: Settings = {
   customOffsets: '0,1%; 0,2%; 0,5%; 1,0%',
   limitAdjusterEnabled: true,
   confirmPageEnabled: false,
+  confirmPagePerformanceInfoEnabled: false,
   postboxDownloaderEnabled: true,
   postboxFilenameMode: 'display',
 };
@@ -290,6 +292,22 @@ const App: React.FC = () => {
                 </button>
               </div>
 
+              {/* Confirm Page Performance Info Toggle */}
+              {settings.confirmPageEnabled && (
+                <div className="flex items-center justify-between bg-purple-50 p-2 rounded border border-purple-100 mb-2 ml-4">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-purple-900">Performance-Info</span>
+                    <span className="text-[10px] text-purple-700">Zeigt "Meine Position" Details</span>
+                  </div>
+                  <button
+                    onClick={() => updateSettings({ ...settings, confirmPagePerformanceInfoEnabled: !settings.confirmPagePerformanceInfoEnabled })}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.confirmPagePerformanceInfoEnabled ? 'bg-purple-500' : 'bg-slate-300'}`}
+                  >
+                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.confirmPagePerformanceInfoEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+              )}
+
               {/* Offset Buttons Toggle */}
               <div className="pt-2 border-t border-slate-100">
                 <div className="flex items-center justify-between mb-2">
@@ -346,7 +364,7 @@ const App: React.FC = () => {
             <div className="p-3 bg-white border-t border-slate-100 animate-fade-in">
               <div className="flex items-start gap-2 mb-3 text-[11px] text-slate-600">
                 <Info className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" />
-                <p title="Lädt alle aufgelisteten PDFs als ZIP-Archiv mit Dateidatum laut Liste herunter.">Lädt alle aufgelisteten PDFs als ZIP-Archiv mit Dateidatum laut Liste herunter.</p>
+                <p title="Lädt alle aufgelisteten PDFs als ZIP-Archiv mit Dateidatum entsprechend Liste herunter.">Lädt alle aufgelisteten PDFs als ZIP-Archiv mit Dateidatum entsprechend Liste herunter.</p>
               </div>
 
               <div className="space-y-1">
