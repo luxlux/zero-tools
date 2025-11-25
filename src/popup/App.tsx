@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Clock, Save, Info, Eye, Power, Activity, Zap } from 'lucide-react';
+import { Clock, Save, Info, Eye, Power, Activity, Zap, TrendingUp } from 'lucide-react';
 
 declare const chrome: any;
 
@@ -248,71 +248,65 @@ const App: React.FC = () => {
                 <p>Fügt Buttons unter Bid/Ask-Preisen hinzu, um diese als Limit zu setzen.</p>
               </div>
 
-              {/* Auto-Check Toggle */}
-              <div className="flex items-center justify-between bg-purple-50 p-2 rounded border border-purple-100 mb-2">
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-purple-900">Automatisch prüfen</span>
-                  <span className="text-[10px] text-purple-700">Klick betätigt auch "Order prüfen"</span>
-                  <span className="text-[9px] text-purple-600/80 block mt-0.5">(Alternativ: Shift-Taste halten)</span>
-                </div>
-                <button
-                  onClick={toggleAutoCheck}
-                  className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.autoCheckEnabled ? 'bg-purple-500' : 'bg-slate-300'}`}
-                >
-                  <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.autoCheckEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
+              {/* Order Eingabe Seite */}
+              <div className="mb-3">
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Order Eingabe Seite</div>
 
-              {/* Limit Adjuster Toggle */}
-              <div className={`flex items-center justify-between bg-purple-50 p-2 rounded border border-purple-100 mb-2 ${settings.autoCheckEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-purple-900">Limit-Anpassung</span>
-                  <span className="text-[10px] text-purple-700">Buttons für +/- Anpassung</span>
-                </div>
-                <button
-                  onClick={toggleLimitAdjuster}
-                  disabled={settings.autoCheckEnabled}
-                  className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.limitAdjusterEnabled ? 'bg-purple-500' : 'bg-slate-300'}`}
-                >
-                  <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.limitAdjusterEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
-
-              {/* Confirm Page Toggle */}
-              <div className="flex items-center justify-between bg-purple-50 p-2 rounded border border-purple-100 mb-2">
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-purple-900">Order-Änderung</span>
-                  <span className="text-[10px] text-purple-700">Limit ändern auf Bestätigungsseite</span>
-                </div>
-                <button
-                  onClick={() => updateSettings({ ...settings, confirmPageEnabled: !settings.confirmPageEnabled })}
-                  className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.confirmPageEnabled ? 'bg-purple-500' : 'bg-slate-300'}`}
-                >
-                  <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.confirmPageEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
-
-              {/* Confirm Page Performance Info Toggle */}
-              {settings.confirmPageEnabled && (
-                <div className="flex items-center justify-between bg-purple-50 p-2 rounded border border-purple-100 mb-2 ml-4">
+                {/* Auto-Check Toggle */}
+                <div className="flex items-center justify-between bg-purple-50 p-2 rounded border border-purple-100 mb-2">
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold text-purple-900">Performance-Info</span>
-                    <span className="text-[10px] text-purple-700">Zeigt "Meine Position" Details</span>
+                    <span className="text-xs font-bold text-purple-900">Automatisch prüfen</span>
+                    <span className="text-[10px] text-purple-700">Klick betätigt auch "Order prüfen"</span>
+                    <span className="text-[9px] text-purple-600/80 block mt-0.5">(Alternativ: Shift-Taste halten)</span>
                   </div>
                   <button
-                    onClick={() => updateSettings({ ...settings, confirmPagePerformanceInfoEnabled: !settings.confirmPagePerformanceInfoEnabled })}
-                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.confirmPagePerformanceInfoEnabled ? 'bg-purple-500' : 'bg-slate-300'}`}
+                    onClick={toggleAutoCheck}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.autoCheckEnabled ? 'bg-purple-500' : 'bg-slate-300'}`}
                   >
-                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.confirmPagePerformanceInfoEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.autoCheckEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
                   </button>
                 </div>
-              )}
+
+                {/* Limit Adjuster Toggle */}
+                <div className={`flex items-center justify-between bg-purple-50 p-2 rounded border border-purple-100 ${settings.autoCheckEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-purple-900">Limit-Anpassung</span>
+                    <span className="text-[10px] text-purple-700">Buttons für +/- Anpassung</span>
+                  </div>
+                  <button
+                    onClick={toggleLimitAdjuster}
+                    disabled={settings.autoCheckEnabled}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.limitAdjusterEnabled ? 'bg-purple-500' : 'bg-slate-300'}`}
+                  >
+                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.limitAdjusterEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Order Kontroll Seite */}
+              <div className="mb-3">
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Order Kontroll Seite</div>
+
+                {/* Order-Änderung Toggle */}
+                <div className="flex items-center justify-between bg-purple-50 p-2 rounded border border-purple-100">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-purple-900">Order-Änderung</span>
+                    <span className="text-[10px] text-purple-700">Limit ändern auf Bestätigungsseite</span>
+                  </div>
+                  <button
+                    onClick={() => updateSettings({ ...settings, confirmPageEnabled: !settings.confirmPageEnabled })}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.confirmPageEnabled ? 'bg-purple-500' : 'bg-slate-300'}`}
+                  >
+                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.confirmPageEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+              </div>
 
               {/* Offset Buttons Toggle */}
               <div className="pt-2 border-t border-slate-100">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold text-slate-700">Offset-Buttons</span>
+                    <span className="text-xs font-bold text-slate-700">Offset-Buttons (für Limits)</span>
                     <span className="text-[10px] text-slate-500">Zusätzliche %-Buttons</span>
                   </div>
                   <button
@@ -335,6 +329,36 @@ const App: React.FC = () => {
                     />
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Performance-Info - Eigenes Feature (auf Order Kontroll Seite) */}
+        <div className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${settings.confirmPagePerformanceInfoEnabled ? 'border-blue-200 ring-1 ring-blue-100' : 'border-slate-200 grayscale-[0.5]'}`}>
+          <div className="p-3 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-2">
+              <div className={`p-1.5 rounded-lg ${settings.confirmPagePerformanceInfoEnabled ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-500'}`}>
+                <TrendingUp className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Performance-Info</h3>
+                <p className="text-[10px] text-slate-500">Auf Order Kontroll Seite</p>
+              </div>
+            </div>
+            <button
+              onClick={() => updateSettings({ ...settings, confirmPagePerformanceInfoEnabled: !settings.confirmPagePerformanceInfoEnabled })}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${settings.confirmPagePerformanceInfoEnabled ? 'bg-blue-500' : 'bg-slate-300'}`}
+            >
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${settings.confirmPagePerformanceInfoEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+
+          {settings.confirmPagePerformanceInfoEnabled && (
+            <div className="p-3 bg-white border-t border-slate-100 animate-fade-in">
+              <div className="flex items-start gap-2 mb-3 text-[11px] text-slate-600">
+                <Info className="w-3.5 h-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+                <p>Zeigt Details zu deiner Position auf der Order Kontroll Seite (Einstandskurs, Performance, etc.).</p>
               </div>
             </div>
           )}
