@@ -10,7 +10,10 @@ interface Settings {
   featureTwoEnabled: boolean;
   autoCheckEnabled: boolean;
   offsetButtonsEnabled: boolean;
+  offsetButtonMode: 'percentage' | 'fixed';
   customOffsets: string;
+  offsetButtonStep: number;
+  offsetButtonCount: number;
   limitAdjusterEnabled: boolean;
   confirmPageEnabled: boolean;
   confirmPagePerformanceInfoEnabled: boolean;
@@ -18,21 +21,26 @@ interface Settings {
   postboxFilenameMode: 'original' | 'display';
 }
 
-let settings: Settings = {
+const defaultSettings: Settings = {
   isActive: true,
-  latencyMonitorEnabled: true,
-  warningThreshold: 5,
-  criticalThreshold: 20,
+  latencyMonitorEnabled: false,
+  warningThreshold: 3,
+  criticalThreshold: 5,
   featureTwoEnabled: false,
   autoCheckEnabled: false,
   offsetButtonsEnabled: false,
-  customOffsets: '0,1%; 0,2%; 0,5%; 1,0%',
+  offsetButtonMode: 'percentage',
+  customOffsets: '0.5,1,2,5',
+  offsetButtonStep: 0.05,
+  offsetButtonCount: 20,
   limitAdjusterEnabled: false,
   confirmPageEnabled: false,
   confirmPagePerformanceInfoEnabled: false,
-  postboxDownloaderEnabled: true,
-  postboxFilenameMode: 'display',
+  postboxDownloaderEnabled: false,
+  postboxFilenameMode: 'display'
 };
+
+let settings: Settings = { ...defaultSettings };
 
 // Load settings on startup
 if (typeof chrome !== 'undefined' && chrome.storage) {
@@ -280,6 +288,8 @@ const updateUIState = () => {
     if (btn.classList.contains('zd-offset-btn') && btn.parentElement?.classList.contains('zd-limit-adjuster')) return;
     // Skip confirm page buttons
     if (btn.closest('.zero-delay-confirm-controls')) return;
+    // Skip step control buttons
+    if (btn.classList.contains('zd-step-control-btn')) return;
 
     const originalText = btn.getAttribute('data-original-text') || btn.textContent?.replace(' & Prüfen', '') || '';
     if (!btn.getAttribute('data-original-text')) {
@@ -468,8 +478,118 @@ const waitForElement = (selector: string, timeout: number): Promise<Element | nu
   });
 };
 
+// Step size presets for intuitive value navigation - Strings define the display precision!
+const STEP_PRESETS = [
+  "0.001", "0.0025", "0.005",
+  "0.01", "0.025", "0.05",
+  "0.10", "0.25", "0.50",
+  "1.00", "2.50", "5.00",
+  "10.00", "25.00", "50.00"
+];
+
+// Helper: Find nearest preset to a given step (returns the string format)
+const findNearestPreset = (step: number): string => {
+  return STEP_PRESETS.reduce((prev, curr) =>
+    Math.abs(parseFloat(curr) - step) < Math.abs(parseFloat(prev) - step) ? curr : prev
+  );
+};
+
+// Helper: Get next smaller preset (returns number for settings)
+const getSmallerPreset = (currentStep: number): number => {
+  const nearest = findNearestPreset(currentStep);
+  const currentIndex = STEP_PRESETS.indexOf(nearest);
+  const nextPreset = currentIndex > 0 ? STEP_PRESETS[currentIndex - 1] : STEP_PRESETS[0];
+  return parseFloat(nextPreset);
+};
+
+// Helper: Get next larger preset (returns number for settings)
+const getLargerPreset = (currentStep: number): number => {
+  const nearest = findNearestPreset(currentStep);
+  const currentIndex = STEP_PRESETS.indexOf(nearest);
+  const nextPreset = currentIndex < STEP_PRESETS.length - 1
+    ? STEP_PRESETS[currentIndex + 1]
+    : STEP_PRESETS[STEP_PRESETS.length - 1];
+  return parseFloat(nextPreset);
+};
+
+// Helper: Get decimal places from the preset string
+const getDecimalPlacesFromPreset = (step: number): number => {
+  const preset = findNearestPreset(step);
+  if (preset.indexOf('.') === -1) return 0;
+  return preset.split('.')[1].length;
+};
+
 // Global tooltip update interval
 let tooltipUpdateInterval: number | null = null;
+
+/**
+ * Generate offset button data for both percentage and fixed modes
+ * Returns array of {offset, label, isPositive} objects
+ */
+const generateOffsetButtonData = (): Array<{ offset: number; label: string; isPositive: boolean }> => {
+  const mode = settings.offsetButtonMode;
+
+  if (mode === 'percentage') {
+    // Percentage mode - parse custom offsets
+    const offsets: number[] = [];
+    if (settings.offsetButtonsEnabled && settings.customOffsets) {
+      const parsed = settings.customOffsets.split(';')
+        .map(s => parseFloat(s.trim().replace(',', '.')))
+        .filter(n => !isNaN(n));
+      offsets.push(...Array.from(new Set(parsed.map(Math.abs))).sort((a, b) => a - b));
+    }
+
+    const buttons: Array<{ offset: number; label: string; isPositive: boolean }> = [];
+
+    // Positive buttons
+    offsets.forEach(off => {
+      buttons.push({ offset: off, label: `+${off}%`, isPositive: true });
+    });
+
+    // Negative buttons
+    offsets.forEach(off => {
+      buttons.push({ offset: off, label: `-${off}%`, isPositive: false });
+    });
+
+    return buttons;
+  } else {
+    // Fixed-step mode
+    const step = settings.offsetButtonStep;
+    const count = settings.offsetButtonCount;
+    const buttonsPerRow = 5;
+    const rows = count / 10; // Each 10 buttons = 1 row per side
+    const decimals = getDecimalPlacesFromPreset(step);
+
+    const buttons: Array<{ offset: number; label: string; isPositive: boolean }> = [];
+
+    // Generate positive buttons (top rows, in reverse order for display)
+    for (let row = rows; row > 0; row--) {
+      for (let col = 1; col <= buttonsPerRow; col++) {
+        const offsetValue = step * ((row - 1) * buttonsPerRow + col);
+        buttons.push({
+          offset: offsetValue,
+          label: `+${offsetValue.toFixed(decimals).replace('.', ',')}`,
+          isPositive: true
+        });
+      }
+    }
+
+    // Generate negative buttons (bottom rows)
+    for (let row = 1; row <= rows; row++) {
+      for (let col = 1; col <= buttonsPerRow; col++) {
+        const offsetValue = step * ((row - 1) * buttonsPerRow + col);
+        buttons.push({
+          offset: offsetValue,
+          label: `-${offsetValue.toFixed(decimals).replace('.', ',')}`,
+          isPositive: false
+        });
+      }
+    }
+
+    return buttons;
+  }
+};
+
 
 const injectLimitButtons = () => {
   injectStyles();
@@ -518,6 +638,9 @@ const injectLimitButtons = () => {
     hasSingle: !!(singlePriceStr && !isNaN(parseFloat(singlePriceStr))),
     autoCheck: settings.autoCheckEnabled,
     offsetEnabled: settings.offsetButtonsEnabled,
+    offsetMode: settings.offsetButtonMode,
+    offsetStep: settings.offsetButtonStep.toString(),
+    offsetCount: settings.offsetButtonCount.toString(),
     offsets: settings.customOffsets
   };
 
@@ -531,6 +654,9 @@ const injectLimitButtons = () => {
       hasSingle: controls.getAttribute('data-has-single') === 'true',
       autoCheck: controls.getAttribute('data-auto-check') === 'true',
       offsetEnabled: controls.getAttribute('data-offset-enabled') === 'true',
+      offsetMode: controls.getAttribute('data-offset-mode') || 'percentage',
+      offsetStep: controls.getAttribute('data-offset-step') || '0.05',
+      offsetCount: controls.getAttribute('data-offset-count') || '20',
       offsets: controls.getAttribute('data-offsets') || ''
     };
 
@@ -541,6 +667,9 @@ const injectLimitButtons = () => {
       structuralState.hasSingle === currentStructure.hasSingle &&
       structuralState.autoCheck === currentStructure.autoCheck &&
       structuralState.offsetEnabled === currentStructure.offsetEnabled &&
+      structuralState.offsetMode === currentStructure.offsetMode &&
+      structuralState.offsetStep === currentStructure.offsetStep &&
+      structuralState.offsetCount === currentStructure.offsetCount &&
       structuralState.offsets === currentStructure.offsets
     ) {
       // Just update price data
@@ -585,6 +714,9 @@ const injectLimitButtons = () => {
   controls.setAttribute('data-has-single', structuralState.hasSingle.toString());
   controls.setAttribute('data-auto-check', structuralState.autoCheck.toString());
   controls.setAttribute('data-offset-enabled', structuralState.offsetEnabled.toString());
+  controls.setAttribute('data-offset-mode', structuralState.offsetMode);
+  controls.setAttribute('data-offset-step', structuralState.offsetStep);
+  controls.setAttribute('data-offset-count', structuralState.offsetCount);
   controls.setAttribute('data-offsets', structuralState.offsets);
   if (bidPriceStr) controls.setAttribute('data-bid', bidPriceStr);
   if (askPriceStr) controls.setAttribute('data-ask', askPriceStr);
@@ -592,7 +724,7 @@ const injectLimitButtons = () => {
   const isAutoCheck = settings.autoCheckEnabled;
   let originalValue = '';
 
-  const handleTooltip = (btn: HTMLButtonElement, priceType: 'bid' | 'ask' | 'single', offset?: number) => {
+  const handleTooltip = (btn: HTMLButtonElement, priceType: 'bid' | 'ask' | 'single', offset?: number, isFixedMode?: boolean) => {
     const updateTooltipContent = () => {
       const controls = btn.closest('.zero-delay-limit-controls');
       if (!controls) return null;
@@ -603,8 +735,17 @@ const injectLimitButtons = () => {
       let finalPrice = basePrice;
       if (offset !== undefined) {
         const base = parseFloat(basePrice);
-        const decimals = basePrice.indexOf('.') >= 0 ? basePrice.split('.')[1].length : 2;
-        const newPrice = base * (1 + offset / 100);
+        const decimals = Math.max(basePrice.indexOf('.') >= 0 ? basePrice.split('.')[1].length : 2, 4);
+
+        let newPrice: number;
+        if (isFixedMode) {
+          // Fixed mode: add offset directly
+          newPrice = base + offset;
+        } else {
+          // Percentage mode: multiply by (1 + offset/100)
+          newPrice = base * (1 + offset / 100);
+        }
+
         finalPrice = newPrice.toFixed(decimals);
       }
 
@@ -717,25 +858,22 @@ const injectLimitButtons = () => {
     return str.split('.')[1].length;
   };
 
-  const createOffsetBtn = (priceType: 'bid' | 'ask' | 'single', offset: number, isPositive: boolean) => {
-    const finalOffset = isPositive ? offset : -offset;
-    const sign = isPositive ? '+' : '-';
-    const label = `${sign}${offset.toString().replace('.', ',')}%`;
-
+  const createOffsetBtn = (priceType: 'bid' | 'ask' | 'single', offset: number, label: string, isFixedMode: boolean) => {
     const btn = document.createElement('button');
     btn.setAttribute('data-original-text', label);
     btn.setAttribute('data-price-type', priceType);
-    btn.setAttribute('data-offset', finalOffset.toString());
+    btn.setAttribute('data-offset', offset.toString());
+    btn.setAttribute('data-is-fixed-mode', isFixedMode.toString());
 
     // Initial state
     if (isAutoCheck || isShiftHeld) {
       btn.classList.add('zd-btn-primary');
     }
-    btn.textContent = label; // Offset buttons usually don't change text to "& Prüfen" due to space, but color changes
+    btn.innerHTML = formatButtonLabel(label);
 
     btn.className = 'zd-btn zd-offset-btn';
 
-    handleTooltip(btn, priceType, finalOffset);
+    handleTooltip(btn, priceType, offset, isFixedMode);
 
     btn.onclick = (e) => {
       e.preventDefault();
@@ -744,7 +882,7 @@ const injectLimitButtons = () => {
       const tooltip = document.getElementById('zd-tooltip-el');
       if (tooltip) tooltip.style.display = 'none';
 
-      btn.blur(); // Remove focus outline
+      btn.blur();
 
       // Get current price and calculate final price
       const controls = btn.closest('.zero-delay-limit-controls');
@@ -752,8 +890,17 @@ const injectLimitButtons = () => {
       if (!basePriceStr) return;
 
       const basePrice = parseFloat(basePriceStr);
-      const decimals = basePriceStr.indexOf('.') >= 0 ? basePriceStr.split('.')[1].length : 2;
-      const newPrice = basePrice * (1 + finalOffset / 100);
+      const decimals = Math.max(basePriceStr.indexOf('.') >= 0 ? basePriceStr.split('.')[1].length : 2, 4);
+
+      let newPrice: number;
+      if (isFixedMode) {
+        // Fixed mode: add offset directly
+        newPrice = basePrice + offset;
+      } else {
+        // Percentage mode: multiply by (1 + offset/100)
+        newPrice = basePrice * (1 + offset / 100);
+      }
+
       const newPriceStr = newPrice.toFixed(decimals);
 
       try {
@@ -771,35 +918,163 @@ const injectLimitButtons = () => {
     const group = document.createElement('div');
     group.className = 'zd-group-col';
 
-    let offsets: number[] = [];
-    if (settings.offsetButtonsEnabled && settings.customOffsets) {
-      offsets = settings.customOffsets.split(';')
-        .map(s => parseFloat(s.trim().replace(',', '.')))
-        .filter(n => !isNaN(n));
-      offsets = Array.from(new Set(offsets.map(Math.abs))).sort((a, b) => a - b);
-    }
+    if (settings.offsetButtonsEnabled) {
+      const buttonData = generateOffsetButtonData();
+      const isFixedMode = settings.offsetButtonMode === 'fixed';
 
-    // Top Row (Positive)
-    if (offsets.length > 0) {
-      const row = document.createElement('div');
-      row.className = 'zd-offsets-row';
-      offsets.forEach(off => {
-        row.appendChild(createOffsetBtn(priceType, off, true));
-      });
-      group.appendChild(row);
-    }
+      // Separate positive and negative buttons
+      const positiveButtons = buttonData.filter(b => b.isPositive);
+      const negativeButtons = buttonData.filter(b => !b.isPositive);
 
-    // Main Button
-    group.appendChild(createBtn(label, priceType));
+      // Step Control Buttons (only in fixed mode)
+      if (isFixedMode) {
+        const controlRow = document.createElement('div');
+        controlRow.className = 'zd-offsets-row';
+        controlRow.style.marginBottom = '4px';
+        controlRow.style.justifyContent = 'flex-end'; // Right align
+        controlRow.style.gap = '4px'; // Small gap
 
-    // Bottom Row (Negative)
-    if (offsets.length > 0) {
-      const row = document.createElement('div');
-      row.className = 'zd-offsets-row';
-      offsets.forEach(off => {
-        row.appendChild(createOffsetBtn(priceType, off, false));
-      });
-      group.appendChild(row);
+        const applyControlStyle = (btn: HTMLButtonElement) => {
+          btn.className = 'zd-btn zd-step-control-btn'; // Add specific class for exclusion
+          // Match inactive offset button style
+          btn.style.backgroundColor = '#fff';
+          btn.style.borderColor = '#ced4da';
+          btn.style.color = '#495057';
+          btn.style.padding = '0'; // Reset padding for centering
+          btn.style.width = '35px'; // Match min-width of offset buttons
+          btn.style.height = '20px'; // Match approximate height of offset buttons
+          btn.style.minWidth = '35px';
+          btn.style.display = 'flex';
+          btn.style.alignItems = 'center';
+          btn.style.justifyContent = 'center';
+          btn.style.fontSize = '10px'; // Match offset button font size
+
+          // Hover effects
+          btn.onmouseenter = () => { btn.style.backgroundColor = '#e9ecef'; btn.style.borderColor = '#adb5bd'; };
+          btn.onmouseleave = () => { btn.style.backgroundColor = '#fff'; btn.style.borderColor = '#ced4da'; };
+        };
+
+        // Kleiner Button (<)
+        const smallerBtn = document.createElement('button');
+        // Use standard stroke color #495057 to match text
+        smallerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>';
+        applyControlStyle(smallerBtn);
+        smallerBtn.title = 'Kleinerer Schritt';
+        smallerBtn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation(); // No auto-check
+          const newStep = getSmallerPreset(settings.offsetButtonStep);
+          settings.offsetButtonStep = newStep;
+          injectLimitButtons();
+        };
+
+        // Größer Button (>)
+        const largerBtn = document.createElement('button');
+        largerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+        applyControlStyle(largerBtn);
+        largerBtn.title = 'Größerer Schritt';
+        largerBtn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation(); // No auto-check
+          const newStep = getLargerPreset(settings.offsetButtonStep);
+          settings.offsetButtonStep = newStep;
+          injectLimitButtons();
+        };
+
+        // Speichern Button (Floppy)
+        const saveBtn = document.createElement('button');
+        saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
+        applyControlStyle(saveBtn);
+        saveBtn.title = 'Als Standard speichern';
+        saveBtn.onclick = async (e) => {
+          e.preventDefault();
+          e.stopPropagation(); // No auto-check
+          try {
+            if (chrome.runtime?.id) {
+              await chrome.storage.local.set({
+                offsetButtonStep: settings.offsetButtonStep
+              });
+              // Visual feedback (Check icon)
+              saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+              setTimeout(() => {
+                saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
+              }, 1500);
+            }
+          } catch (err) {
+            console.warn('Zero Tools: Could not save step size');
+          }
+        };
+
+        controlRow.appendChild(smallerBtn);
+        controlRow.appendChild(largerBtn);
+        controlRow.appendChild(saveBtn);
+        group.appendChild(controlRow);
+      }
+
+      // For fixed mode, group buttons into rows of 5
+      if (isFixedMode) {
+        const buttonsPerRow = 5;
+
+        // Render positive buttons in rows - SMALLEST VALUES FIRST (closest to main button)
+        // We need to reverse the order: start from beginning and go up
+        for (let i = 0; i < positiveButtons.length; i += buttonsPerRow) {
+          const row = document.createElement('div');
+          row.className = 'zd-offsets-row';
+
+          const endIdx = Math.min(positiveButtons.length, i + buttonsPerRow);
+          for (let j = i; j < endIdx; j++) {
+            const btnData = positiveButtons[j];
+            row.appendChild(createOffsetBtn(priceType, btnData.offset, btnData.label, isFixedMode));
+          }
+
+          group.appendChild(row);
+        }
+      } else {
+        // Percentage mode: single row of positive buttons
+        if (positiveButtons.length > 0) {
+          const row = document.createElement('div');
+          row.className = 'zd-offsets-row';
+          positiveButtons.forEach(btnData => {
+            row.appendChild(createOffsetBtn(priceType, btnData.offset, btnData.label, isFixedMode));
+          });
+          group.appendChild(row);
+        }
+      }
+
+      // Main Button
+      group.appendChild(createBtn(label, priceType));
+
+      // Negative buttons
+      if (isFixedMode) {
+        const buttonsPerRow = 5;
+
+        // Render negative buttons in rows (top to bottom)
+        for (let i = 0; i < negativeButtons.length; i += buttonsPerRow) {
+          const row = document.createElement('div');
+          row.className = 'zd-offsets-row';
+
+          const endIdx = Math.min(negativeButtons.length, i + buttonsPerRow);
+          for (let j = i; j < endIdx; j++) {
+            const btnData = negativeButtons[j];
+            row.appendChild(createOffsetBtn(priceType, -btnData.offset, btnData.label, isFixedMode));
+          }
+
+          group.appendChild(row);
+        }
+      } else {
+        // Percentage mode: single row of negative buttons
+        if (negativeButtons.length > 0) {
+          const row = document.createElement('div');
+          row.className = 'zd-offsets-row';
+          negativeButtons.forEach(btnData => {
+            row.appendChild(createOffsetBtn(priceType, -btnData.offset, btnData.label, isFixedMode));
+          });
+          group.appendChild(row);
+        }
+      }
+    } else {
+      // No offset buttons, just main button
+      group.appendChild(createBtn(label, priceType));
     }
 
     return group;
@@ -927,22 +1202,126 @@ const injectConfirmPageButtons = () => {
 
   // Offset buttons
   if (settings.offsetButtonsEnabled) {
-    const offsets = settings.customOffsets.split(';')
-      .map(s => parseFloat(s.trim().replace(',', '.')))
-      .filter(n => !isNaN(n));
-    const uniqueOffsets = Array.from(new Set(offsets.map(Math.abs))).sort((a, b) => a - b);
+    const buttonData = generateOffsetButtonData();
+    const isFixedMode = settings.offsetButtonMode === 'fixed';
 
-    // Top Row (Positive offsets)
-    if (uniqueOffsets.length > 0) {
-      const topRow = document.createElement('div');
-      topRow.className = 'zd-offsets-row';
+    // Separate positive and negative buttons
+    const positiveButtons = buttonData.filter(b => b.isPositive);
+    const negativeButtons = buttonData.filter(b => !b.isPositive);
 
-      uniqueOffsets.forEach(offset => {
-        const label = `+${offset.toString().replace('.', ',')}%`;
-        topRow.appendChild(createConfirmOffsetBtn(label, offset));
-      });
+    // Step Control Buttons (only in fixed mode)
+    if (isFixedMode) {
+      const controlRow = document.createElement('div');
+      controlRow.className = 'zd-offsets-row';
+      controlRow.style.marginBottom = '4px';
+      controlRow.style.justifyContent = 'flex-end'; // Right align
+      controlRow.style.gap = '4px'; // Small gap
 
-      group.appendChild(topRow);
+      const applyControlStyle = (btn: HTMLButtonElement) => {
+        btn.className = 'zd-btn zd-step-control-btn'; // Add specific class for exclusion
+        // Match inactive offset button style
+        btn.style.backgroundColor = '#fff';
+        btn.style.borderColor = '#ced4da';
+        btn.style.color = '#495057';
+        btn.style.padding = '0'; // Reset padding for centering
+        btn.style.width = '35px'; // Match min-width of offset buttons
+        btn.style.height = '20px'; // Match approximate height of offset buttons
+        btn.style.minWidth = '35px';
+        btn.style.display = 'flex';
+        btn.style.alignItems = 'center';
+        btn.style.justifyContent = 'center';
+        btn.style.fontSize = '10px'; // Match offset button font size
+
+        // Hover effects
+        btn.onmouseenter = () => { btn.style.backgroundColor = '#e9ecef'; btn.style.borderColor = '#adb5bd'; };
+        btn.onmouseleave = () => { btn.style.backgroundColor = '#fff'; btn.style.borderColor = '#ced4da'; };
+      };
+
+      // Kleiner Button (<)
+      const smallerBtn = document.createElement('button');
+      smallerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>';
+      applyControlStyle(smallerBtn);
+      smallerBtn.title = 'Kleinerer Schritt';
+      smallerBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation(); // No auto-check
+        const newStep = getSmallerPreset(settings.offsetButtonStep);
+        settings.offsetButtonStep = newStep;
+        document.querySelector('.zero-delay-confirm-controls')?.remove();
+        injectConfirmPageButtons();
+      };
+
+      // Größer Button (>)
+      const largerBtn = document.createElement('button');
+      largerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+      applyControlStyle(largerBtn);
+      largerBtn.title = 'Größerer Schritt';
+      largerBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation(); // No auto-check
+        const newStep = getLargerPreset(settings.offsetButtonStep);
+        settings.offsetButtonStep = newStep;
+        document.querySelector('.zero-delay-confirm-controls')?.remove();
+        injectConfirmPageButtons();
+      };
+
+      // Speichern Button (Floppy)
+      const saveBtn = document.createElement('button');
+      saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
+      applyControlStyle(saveBtn);
+      saveBtn.title = 'Als Standard speichern';
+      saveBtn.onclick = async (e) => {
+        e.preventDefault();
+        e.stopPropagation(); // No auto-check
+        try {
+          if (chrome.runtime?.id) {
+            await chrome.storage.local.set({
+              offsetButtonStep: settings.offsetButtonStep
+            });
+            // Visual feedback (Check icon)
+            saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+            setTimeout(() => {
+              saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
+            }, 1500);
+          }
+        } catch (err) {
+          console.warn('Zero Tools: Could not save step size');
+        }
+      };
+
+      controlRow.appendChild(smallerBtn);
+      controlRow.appendChild(largerBtn);
+      controlRow.appendChild(saveBtn);
+      group.appendChild(controlRow);
+    }
+
+    // For fixed mode, group buttons into rows of 5
+    if (isFixedMode) {
+      const buttonsPerRow = 5;
+
+      // Render positive buttons in rows - SMALLEST VALUES FIRST (closest to main button)
+      for (let i = 0; i < positiveButtons.length; i += buttonsPerRow) {
+        const row = document.createElement('div');
+        row.className = 'zd-offsets-row';
+
+        const endIdx = Math.min(positiveButtons.length, i + buttonsPerRow);
+        for (let j = i; j < endIdx; j++) {
+          const btnData = positiveButtons[j];
+          row.appendChild(createConfirmOffsetBtn(btnData.label, btnData.offset, isFixedMode));
+        }
+
+        group.appendChild(row);
+      }
+    } else {
+      // Percentage mode: single row of positive buttons
+      if (positiveButtons.length > 0) {
+        const row = document.createElement('div');
+        row.className = 'zd-offsets-row';
+        positiveButtons.forEach(btnData => {
+          row.appendChild(createConfirmOffsetBtn(btnData.label, btnData.offset, isFixedMode));
+        });
+        group.appendChild(row);
+      }
     }
   }
 
@@ -951,24 +1330,38 @@ const injectConfirmPageButtons = () => {
   const mainButtonLabel = isBuy ? 'Ask als Limit' : 'Bid als Limit';
   group.appendChild(createConfirmBtn(mainButtonLabel, 0));
 
-  // Offset buttons
+  // Offset buttons - negative
   if (settings.offsetButtonsEnabled) {
-    const offsets = settings.customOffsets.split(';')
-      .map(s => parseFloat(s.trim().replace(',', '.')))
-      .filter(n => !isNaN(n));
-    const uniqueOffsets = Array.from(new Set(offsets.map(Math.abs))).sort((a, b) => a - b);
+    const buttonData = generateOffsetButtonData();
+    const isFixedMode = settings.offsetButtonMode === 'fixed';
+    const negativeButtons = buttonData.filter(b => !b.isPositive);
 
-    // Bottom Row (Negative offsets)
-    if (uniqueOffsets.length > 0) {
-      const bottomRow = document.createElement('div');
-      bottomRow.className = 'zd-offsets-row';
+    if (isFixedMode) {
+      const buttonsPerRow = 5;
 
-      uniqueOffsets.forEach(offset => {
-        const label = `-${offset.toString().replace('.', ',')}%`;
-        bottomRow.appendChild(createConfirmOffsetBtn(label, -offset));
-      });
+      // Render negative buttons in rows (top to bottom)
+      for (let i = 0; i < negativeButtons.length; i += buttonsPerRow) {
+        const row = document.createElement('div');
+        row.className = 'zd-offsets-row';
 
-      group.appendChild(bottomRow);
+        const endIdx = Math.min(negativeButtons.length, i + buttonsPerRow);
+        for (let j = i; j < endIdx; j++) {
+          const btnData = negativeButtons[j];
+          row.appendChild(createConfirmOffsetBtn(btnData.label, -btnData.offset, isFixedMode));
+        }
+
+        group.appendChild(row);
+      }
+    } else {
+      // Percentage mode: single row of negative buttons
+      if (negativeButtons.length > 0) {
+        const row = document.createElement('div');
+        row.className = 'zd-offsets-row';
+        negativeButtons.forEach(btnData => {
+          row.appendChild(createConfirmOffsetBtn(btnData.label, -btnData.offset, isFixedMode));
+        });
+        group.appendChild(row);
+      }
     }
   }
 
@@ -1546,16 +1939,37 @@ const injectPositionPerformance = async (controlsContainer: HTMLElement, isin: s
 };
 
 // Helper functions for confirm page buttons
-const getCalculatedPrice = (btn: HTMLElement, offset: number): string => {
+const getCalculatedPrice = (btn: HTMLElement, offset: number, isFixedMode: boolean = false): string => {
   const controls = btn.closest('.zero-delay-confirm-controls');
   if (!controls) return '0';
 
   const basePriceStr = controls.getAttribute('data-current-price') || '0';
-  const decimals = parseInt(controls.getAttribute('data-decimals') || '2');
+  const decimals = Math.max(parseInt(controls.getAttribute('data-decimals') || '2'), 4);
   const basePrice = parseFloat(basePriceStr);
 
-  const newPrice = basePrice * (1 + offset / 100);
+  let newPrice: number;
+  if (isFixedMode) {
+    // Fixed mode: add offset directly
+    newPrice = basePrice + offset;
+  } else {
+    // Percentage mode: multiply by (1 + offset/100)
+    newPrice = basePrice * (1 + offset / 100);
+  }
+
   return newPrice.toFixed(decimals);
+};
+
+// Helper to format button label with faint 3rd+ decimal places
+const formatButtonLabel = (label: string): string => {
+  if (label.indexOf(',') === -1) return label;
+
+  const parts = label.split(',');
+  if (parts[1].length > 2) {
+    const mainDecimals = parts[1].substring(0, 2);
+    const faintDecimals = parts[1].substring(2);
+    return `${parts[0]},${mainDecimals}<span style="opacity: 0.5;">${faintDecimals}</span>`;
+  }
+  return label;
 };
 
 const createConfirmBtn = (label: string, offset: number) => {
@@ -1564,8 +1978,7 @@ const createConfirmBtn = (label: string, offset: number) => {
   btn.className = 'zd-btn zd-btn-primary';
   btn.style.width = '100%';
 
-  // Add tooltip
-  addTooltipToButton(btn, offset);
+  addTooltipToButton(btn, offset, false);
 
   btn.onclick = async (e) => {
     e.preventDefault();
@@ -1575,7 +1988,7 @@ const createConfirmBtn = (label: string, offset: number) => {
     if (tooltip) tooltip.style.display = 'none';
     btn.blur();
 
-    const price = getCalculatedPrice(btn, offset);
+    const price = getCalculatedPrice(btn, offset, false);
 
     const backButton = document.querySelector('a[data-zid="order-mask-back"]') as HTMLElement;
     if (!backButton) return;
@@ -1593,7 +2006,6 @@ const createConfirmBtn = (label: string, offset: number) => {
       }
     }
 
-    // Set flag for highlighting
     try {
       if (chrome.runtime?.id) {
         chrome.storage.local.set({ 'zd_just_updated': true });
@@ -1607,13 +2019,13 @@ const createConfirmBtn = (label: string, offset: number) => {
   return btn;
 };
 
-const createConfirmOffsetBtn = (label: string, offset: number) => {
+const createConfirmOffsetBtn = (label: string, offset: number, isFixedMode: boolean = false) => {
   const btn = document.createElement('button');
-  btn.textContent = label;
+  btn.innerHTML = formatButtonLabel(label);
   btn.className = 'zd-btn zd-offset-btn zd-btn-primary';
+  btn.setAttribute('data-is-fixed-mode', isFixedMode.toString());
 
-  // Add tooltip
-  addTooltipToButton(btn, offset);
+  addTooltipToButton(btn, offset, isFixedMode);
 
   btn.onclick = async (e) => {
     e.preventDefault();
@@ -1623,7 +2035,7 @@ const createConfirmOffsetBtn = (label: string, offset: number) => {
     if (tooltip) tooltip.style.display = 'none';
     btn.blur();
 
-    const price = getCalculatedPrice(btn, offset);
+    const price = getCalculatedPrice(btn, offset, isFixedMode);
 
     const backButton = document.querySelector('a[data-zid="order-mask-back"]') as HTMLElement;
     if (!backButton) return;
@@ -1641,7 +2053,6 @@ const createConfirmOffsetBtn = (label: string, offset: number) => {
       }
     }
 
-    // Set flag for highlighting
     try {
       if (chrome.runtime?.id) {
         chrome.storage.local.set({ 'zd_just_updated': true });
@@ -1655,12 +2066,12 @@ const createConfirmOffsetBtn = (label: string, offset: number) => {
   return btn;
 };
 
-const addTooltipToButton = (btn: HTMLButtonElement, offset: number) => {
+const addTooltipToButton = (btn: HTMLButtonElement, offset: number, isFixedMode: boolean = false) => {
   const updateTooltip = () => {
     const tooltip = document.getElementById('zd-tooltip-el');
     if (!tooltip || tooltip.style.display === 'none') return;
 
-    const price = getCalculatedPrice(btn, offset);
+    const price = getCalculatedPrice(btn, offset, isFixedMode);
     const formattedPrice = price.replace('.', ',');
     const parts = formattedPrice.split(',');
 

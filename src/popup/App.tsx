@@ -1,5 +1,14 @@
+
 import React, { useEffect, useState } from 'react';
 import { Clock, Save, Info, Eye, Power, Activity, Zap, TrendingUp } from 'lucide-react';
+
+const STEP_PRESETS = [
+  "0.001", "0.0025", "0.005",
+  "0.01", "0.025", "0.05",
+  "0.10", "0.25", "0.50",
+  "1.00", "2.50", "5.00",
+  "10.00", "25.00", "50.00"
+];
 
 declare const chrome: any;
 
@@ -18,7 +27,10 @@ interface Settings {
 
   // Sub-feature: Offset Buttons
   offsetButtonsEnabled: boolean;
+  offsetButtonMode: 'percentage' | 'fixed';
   customOffsets: string;
+  offsetButtonStep: number;
+  offsetButtonCount: number;
   // Sub-feature: Limit Adjuster
   limitAdjusterEnabled: boolean;
   // Sub-feature: Confirm Page
@@ -49,7 +61,10 @@ const defaultSettings: Settings = {
   featureTwoEnabled: false,
   autoCheckEnabled: false,
   offsetButtonsEnabled: false,
+  offsetButtonMode: 'percentage',
   customOffsets: '0,1%; 0,2%; 0,5%; 1,0%',
+  offsetButtonStep: 0.05,
+  offsetButtonCount: 20,
   limitAdjusterEnabled: true,
   confirmPageEnabled: false,
   confirmPagePerformanceInfoEnabled: false,
@@ -157,22 +172,22 @@ const App: React.FC = () => {
             </span>
             <button
               onClick={toggleMasterSwitch}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-[#00a1e4] ${settings.isActive ? 'bg-white/90' : 'bg-black/20'}`}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-[#00a1e4] ${settings.isActive ? 'bg-white/90' : 'bg-black/20'} `}
             >
-              <span className={`inline-block h-3.5 w-3.5 transform rounded-full transition-transform ${settings.isActive ? 'translate-x-5 bg-[#00a1e4]' : 'translate-x-0.5 bg-white/90'}`} />
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full transition-transform ${settings.isActive ? 'translate-x-5 bg-[#00a1e4]' : 'translate-x-0.5 bg-white/90'} `} />
             </button>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className={`p-3 space-y-3 transition-opacity duration-300 ${settings.isActive ? 'opacity-100' : 'opacity-50 pointer-events-none grayscale'}`}>
+      <div className={`p-3 space-y-3 transition-opacity duration-300 ${settings.isActive ? 'opacity-100' : 'opacity-50 pointer-events-none grayscale'} `}>
 
         {/* Feature 1: Latency Monitor */}
-        <div className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${settings.latencyMonitorEnabled ? 'border-blue-200 ring-1 ring-blue-100' : 'border-slate-200 grayscale-[0.5]'}`}>
+        <div className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${settings.latencyMonitorEnabled ? 'border-blue-200 ring-1 ring-blue-100' : 'border-slate-200 grayscale-[0.5]'} `}>
           <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div className="flex items-center gap-2">
-              <div className={`p-1.5 rounded-lg ${settings.latencyMonitorEnabled ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-500'}`}>
+              <div className={`p-1.5 rounded-lg ${settings.latencyMonitorEnabled ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-500'} `}>
                 <Activity className="w-4 h-4" />
               </div>
               <div>
@@ -182,9 +197,9 @@ const App: React.FC = () => {
             </div>
             <button
               onClick={toggleLatencyMonitor}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${settings.latencyMonitorEnabled ? 'bg-blue-500' : 'bg-slate-300'}`}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${settings.latencyMonitorEnabled ? 'bg-blue-500' : 'bg-slate-300'} `}
             >
-              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${settings.latencyMonitorEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${settings.latencyMonitorEnabled ? 'translate-x-5' : 'translate-x-0.5'} `} />
             </button>
           </div>
 
@@ -222,10 +237,10 @@ const App: React.FC = () => {
         </div>
 
         {/* Feature 2: Set as Limit */}
-        <div className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${settings.featureTwoEnabled ? 'border-purple-200 ring-1 ring-purple-100' : 'border-slate-200 grayscale-[0.5]'}`}>
+        <div className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${settings.featureTwoEnabled ? 'border-purple-200 ring-1 ring-purple-100' : 'border-slate-200 grayscale-[0.5]'} `}>
           <div className="p-3 flex items-center justify-between bg-slate-50/50">
             <div className="flex items-center gap-2">
-              <div className={`p-1.5 rounded-lg ${settings.featureTwoEnabled ? 'bg-purple-100 text-purple-600' : 'bg-slate-200 text-slate-500'}`}>
+              <div className={`p-1.5 rounded-lg ${settings.featureTwoEnabled ? 'bg-purple-100 text-purple-600' : 'bg-slate-200 text-slate-500'} `}>
                 <Zap className="w-4 h-4" />
               </div>
               <div>
@@ -235,9 +250,9 @@ const App: React.FC = () => {
             </div>
             <button
               onClick={toggleFeatureTwo}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${settings.featureTwoEnabled ? 'bg-purple-500' : 'bg-slate-300'}`}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${settings.featureTwoEnabled ? 'bg-purple-500' : 'bg-slate-300'} `}
             >
-              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${settings.featureTwoEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${settings.featureTwoEnabled ? 'translate-x-5' : 'translate-x-0.5'} `} />
             </button>
           </div>
 
@@ -261,14 +276,14 @@ const App: React.FC = () => {
                   </div>
                   <button
                     onClick={toggleAutoCheck}
-                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.autoCheckEnabled ? 'bg-purple-500' : 'bg-slate-300'}`}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.autoCheckEnabled ? 'bg-purple-500' : 'bg-slate-300'} `}
                   >
-                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.autoCheckEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.autoCheckEnabled ? 'translate-x-3.5' : 'translate-x-0.5'} `} />
                   </button>
                 </div>
 
                 {/* Limit Adjuster Toggle */}
-                <div className={`flex items-center justify-between bg-purple-50 p-2 rounded border border-purple-100 ${settings.autoCheckEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                <div className={`flex items-center justify-between bg-purple-50 p-2 rounded border border-purple-100 ${settings.autoCheckEnabled ? 'opacity-50 cursor-not-allowed' : ''} `}>
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-purple-900">Limit-Anpassung</span>
                     <span className="text-[10px] text-purple-700">Buttons für +/- Anpassung</span>
@@ -276,9 +291,9 @@ const App: React.FC = () => {
                   <button
                     onClick={toggleLimitAdjuster}
                     disabled={settings.autoCheckEnabled}
-                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.limitAdjusterEnabled ? 'bg-purple-500' : 'bg-slate-300'}`}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.limitAdjusterEnabled ? 'bg-purple-500' : 'bg-slate-300'} `}
                   >
-                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.limitAdjusterEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.limitAdjusterEnabled ? 'translate-x-3.5' : 'translate-x-0.5'} `} />
                   </button>
                 </div>
               </div>
@@ -295,9 +310,9 @@ const App: React.FC = () => {
                   </div>
                   <button
                     onClick={() => updateSettings({ ...settings, confirmPageEnabled: !settings.confirmPageEnabled })}
-                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.confirmPageEnabled ? 'bg-purple-500' : 'bg-slate-300'}`}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.confirmPageEnabled ? 'bg-purple-500' : 'bg-slate-300'} `}
                   >
-                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.confirmPageEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.confirmPageEnabled ? 'translate-x-3.5' : 'translate-x-0.5'} `} />
                   </button>
                 </div>
               </div>
@@ -307,26 +322,99 @@ const App: React.FC = () => {
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-slate-700">Offset-Buttons (für Limits)</span>
-                    <span className="text-[10px] text-slate-500">Zusätzliche %-Buttons</span>
+                    <span className="text-[10px] text-slate-500">Zusätzliche Buttons für Orders</span>
                   </div>
                   <button
                     onClick={toggleOffsetButtons}
-                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.offsetButtonsEnabled ? 'bg-purple-500' : 'bg-slate-300'}`}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none ${settings.offsetButtonsEnabled ? 'bg-purple-500' : 'bg-slate-300'} `}
                   >
-                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.offsetButtonsEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${settings.offsetButtonsEnabled ? 'translate-x-3.5' : 'translate-x-0.5'} `} />
                   </button>
                 </div>
 
                 {settings.offsetButtonsEnabled && (
-                  <div className="space-y-1 animate-fade-in">
-                    <label className="text-[10px] font-bold uppercase text-slate-500">Prozentwerte (mit Semikolon getrennt)</label>
-                    <input
-                      type="text"
-                      value={settings.customOffsets}
-                      onChange={(e) => updateSettings({ ...settings, customOffsets: e.target.value })}
-                      className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none"
-                      placeholder="0,1; 0,5; 1,0"
-                    />
+                  <div className="space-y-3 animate-fade-in">
+                    {/* Mode Toggle */}
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Modus</label>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => updateSettings({ ...settings, offsetButtonMode: 'percentage' })}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded transition-colors ${settings.offsetButtonMode === 'percentage'
+                            ? 'bg-purple-500 text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            } `}
+                        >
+                          Prozent
+                        </button>
+                        <button
+                          onClick={() => updateSettings({ ...settings, offsetButtonMode: 'fixed' })}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded transition-colors ${settings.offsetButtonMode === 'fixed'
+                            ? 'bg-purple-500 text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            } `}
+                        >
+                          Feste Schritte
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Percentage Mode Settings */}
+                    {settings.offsetButtonMode === 'percentage' && (
+                      <div className="space-y-1 animate-fade-in">
+                        <label className="text-[10px] font-bold uppercase text-slate-500">Prozentwerte (mit Semikolon getrennt)</label>
+                        <input
+                          type="text"
+                          value={settings.customOffsets}
+                          onChange={(e) => updateSettings({ ...settings, customOffsets: e.target.value })}
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none"
+                          placeholder="0,1; 0,5; 1,0"
+                        />
+                      </div>
+                    )}
+
+                    {/* Fixed Mode Settings */}
+                    {settings.offsetButtonMode === 'fixed' && (
+                      <div className="space-y-2 animate-fade-in">
+                        {/* Step Size */}
+                        <div>
+                          <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Schrittweite (€)</label>
+                          <select
+                            value={settings.offsetButtonStep}
+                            onChange={(e) => updateSettings({ ...settings, offsetButtonStep: parseFloat(e.target.value) })}
+                            className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none"
+                          >
+                            {STEP_PRESETS.map((preset) => (
+                              <option key={preset} value={parseFloat(preset)}>
+                                {preset.replace('.', ',')} €
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Button Count */}
+                        <div>
+                          <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Anzahl Buttons</label>
+                          <select
+                            value={settings.offsetButtonCount}
+                            onChange={(e) => updateSettings({ ...settings, offsetButtonCount: parseInt(e.target.value) })}
+                            className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none"
+                          >
+                            <option value="10">10 (2 Zeilen)</option>
+                            <option value="20">20 (4 Zeilen)</option>
+                            <option value="30">30 (6 Zeilen)</option>
+                            <option value="40">40 (8 Zeilen)</option>
+                            <option value="50">50 (10 Zeilen)</option>
+                          </select>
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex items-start gap-2 text-[10px] text-slate-500 bg-slate-50 p-2 rounded">
+                          <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                          <p>5 Buttons pro Zeile, symmetrisch über/unter dem Kurs.</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -335,10 +423,10 @@ const App: React.FC = () => {
         </div>
 
         {/* Performance-Info - Eigenes Feature (auf Order Kontroll Seite) */}
-        <div className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${settings.confirmPagePerformanceInfoEnabled ? 'border-blue-200 ring-1 ring-blue-100' : 'border-slate-200 grayscale-[0.5]'}`}>
+        <div className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${settings.confirmPagePerformanceInfoEnabled ? 'border-blue-200 ring-1 ring-blue-100' : 'border-slate-200 grayscale-[0.5]'} `}>
           <div className="p-3 flex items-center justify-between bg-slate-50/50">
             <div className="flex items-center gap-2">
-              <div className={`p-1.5 rounded-lg ${settings.confirmPagePerformanceInfoEnabled ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-500'}`}>
+              <div className={`p-1.5 rounded-lg ${settings.confirmPagePerformanceInfoEnabled ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-500'} `}>
                 <TrendingUp className="w-4 h-4" />
               </div>
               <div>
@@ -348,9 +436,9 @@ const App: React.FC = () => {
             </div>
             <button
               onClick={() => updateSettings({ ...settings, confirmPagePerformanceInfoEnabled: !settings.confirmPagePerformanceInfoEnabled })}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${settings.confirmPagePerformanceInfoEnabled ? 'bg-blue-500' : 'bg-slate-300'}`}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${settings.confirmPagePerformanceInfoEnabled ? 'bg-blue-500' : 'bg-slate-300'} `}
             >
-              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${settings.confirmPagePerformanceInfoEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${settings.confirmPagePerformanceInfoEnabled ? 'translate-x-5' : 'translate-x-0.5'} `} />
             </button>
           </div>
 
@@ -365,10 +453,10 @@ const App: React.FC = () => {
         </div>
 
         {/* Feature 3: Postbox Downloader */}
-        <div className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${settings.postboxDownloaderEnabled ? 'border-green-200 ring-1 ring-green-100' : 'border-slate-200 grayscale-[0.5]'}`}>
+        <div className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${settings.postboxDownloaderEnabled ? 'border-green-200 ring-1 ring-green-100' : 'border-slate-200 grayscale-[0.5]'} `}>
           <div className="p-3 flex items-center justify-between bg-slate-50/50">
             <div className="flex items-center gap-2">
-              <div className={`p-1.5 rounded-lg ${settings.postboxDownloaderEnabled ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'}`}>
+              <div className={`p-1.5 rounded-lg ${settings.postboxDownloaderEnabled ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'} `}>
                 <Save className="w-4 h-4" />
               </div>
               <div>
@@ -378,9 +466,9 @@ const App: React.FC = () => {
             </div>
             <button
               onClick={() => updateSettings({ ...settings, postboxDownloaderEnabled: !settings.postboxDownloaderEnabled })}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${settings.postboxDownloaderEnabled ? 'bg-green-500' : 'bg-slate-300'}`}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${settings.postboxDownloaderEnabled ? 'bg-green-500' : 'bg-slate-300'} `}
             >
-              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${settings.postboxDownloaderEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${settings.postboxDownloaderEnabled ? 'translate-x-5' : 'translate-x-0.5'} `} />
             </button>
           </div>
 
