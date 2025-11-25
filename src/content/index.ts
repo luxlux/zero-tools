@@ -158,7 +158,7 @@ const injectStyles = () => {
       font-size: 10px;
       padding: 1px 4px;
       border-radius: 3px;
-      min-width: 35px;
+      min-width: 45px;
       text-align: center;
       line-height: 1.2;
     }
@@ -487,6 +487,17 @@ const STEP_PRESETS = [
   "10.00", "25.00", "50.00"
 ];
 
+// Percentage presets - 5 predefined lists with different step sizes
+const PERCENTAGE_PRESETS: Record<string, number[]> = {
+  'fine-small': [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5, 10, 15, 20, 25, 30, 40, 50],
+  'fine-medium': [0.2, 0.4, 0.6, 0.8, 1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10, 12.5, 15, 20, 25, 30, 40, 50, 60, 75, 100, 150, 200],
+  'standard': [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10, 12.5, 15, 20, 25, 30, 35, 40, 50, 75, 100, 125, 150, 200, 250, 300],
+  'coarse': [1, 2, 3, 4, 5, 7.5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 125, 150, 200, 250, 300, 350, 400, 450, 475, 500],
+  'very-coarse': [2, 5, 10, 15, 20, 30, 40, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 350, 400, 425, 450, 475, 490, 500]
+};
+
+const PERCENTAGE_PRESET_KEYS = Object.keys(PERCENTAGE_PRESETS);
+
 // Helper: Find nearest preset to a given step (returns the string format)
 const findNearestPreset = (step: number): string => {
   return STEP_PRESETS.reduce((prev, curr) =>
@@ -519,6 +530,35 @@ const getDecimalPlacesFromPreset = (step: number): number => {
   return preset.split('.')[1].length;
 };
 
+// Helper: Find nearest percentage preset key
+const findNearestPercentagePreset = (currentKey: string): string => {
+  return PERCENTAGE_PRESET_KEYS.includes(currentKey)
+    ? currentKey
+    : PERCENTAGE_PRESET_KEYS[0]; // Default to first if not found
+};
+
+// Helper: Get next percentage preset (smaller or larger)
+const getNextPercentagePreset = (currentKey: string, direction: 'smaller' | 'larger'): string => {
+  const validKey = findNearestPercentagePreset(currentKey);
+  const index = PERCENTAGE_PRESET_KEYS.indexOf(validKey);
+
+  if (direction === 'smaller') {
+    return index > 0 ? PERCENTAGE_PRESET_KEYS[index - 1] : PERCENTAGE_PRESET_KEYS[0];
+  } else {
+    return index < PERCENTAGE_PRESET_KEYS.length - 1
+      ? PERCENTAGE_PRESET_KEYS[index + 1]
+      : PERCENTAGE_PRESET_KEYS[PERCENTAGE_PRESET_KEYS.length - 1];
+  }
+};
+
+// Helper: Cycle button count through [10, 20, 30, 40, 50]
+const cycleButtonCount = (current: number): number => {
+  const counts = [10, 20, 30, 40, 50];
+  const index = counts.indexOf(current);
+  if (index === -1) return counts[0]; // Default to 10 if not found
+  return counts[(index + 1) % counts.length];
+};
+
 // Global tooltip update interval
 let tooltipUpdateInterval: number | null = null;
 
@@ -530,25 +570,22 @@ const generateOffsetButtonData = (): Array<{ offset: number; label: string; isPo
   const mode = settings.offsetButtonMode;
 
   if (mode === 'percentage') {
-    // Percentage mode - parse custom offsets
-    const offsets: number[] = [];
-    if (settings.offsetButtonsEnabled && settings.customOffsets) {
-      const parsed = settings.customOffsets.split(';')
-        .map(s => parseFloat(s.trim().replace(',', '.')))
-        .filter(n => !isNaN(n));
-      offsets.push(...Array.from(new Set(parsed.map(Math.abs))).sort((a, b) => a - b));
-    }
+    // Percentage mode - use preset lists
+    const presetKey = findNearestPercentagePreset(settings.customOffsets);
+    const preset = PERCENTAGE_PRESETS[presetKey] || PERCENTAGE_PRESETS['standard'];
+    const count = settings.offsetButtonCount;
+    const valuesToUse = preset.slice(0, count / 2); // Use first N values (half for +, half for -)
 
     const buttons: Array<{ offset: number; label: string; isPositive: boolean }> = [];
 
     // Positive buttons
-    offsets.forEach(off => {
-      buttons.push({ offset: off, label: `+${off}%`, isPositive: true });
+    valuesToUse.forEach(off => {
+      buttons.push({ offset: off, label: `+${off.toString().replace('.', ',')}%`, isPositive: true });
     });
 
     // Negative buttons
-    offsets.forEach(off => {
-      buttons.push({ offset: off, label: `-${off}%`, isPositive: false });
+    valuesToUse.forEach(off => {
+      buttons.push({ offset: off, label: `-${off.toString().replace('.', ',')}%`, isPositive: false });
     });
 
     return buttons;
@@ -926,97 +963,137 @@ const injectLimitButtons = () => {
       const positiveButtons = buttonData.filter(b => b.isPositive);
       const negativeButtons = buttonData.filter(b => !b.isPositive);
 
-      // Step Control Buttons (only in fixed mode)
+      // Control Buttons (for both fixed and percentage modes)
+      const controlRow = document.createElement('div');
+      controlRow.className = 'zd-offsets-row';
+      controlRow.style.marginBottom = '4px';
+      controlRow.style.justifyContent = 'flex-end'; // Right align
+      controlRow.style.gap = '4px'; // Small gap
+
+      const applyControlStyle = (btn: HTMLButtonElement) => {
+        btn.className = 'zd-btn zd-step-control-btn'; // Add specific class for exclusion
+        // Match inactive offset button style
+        btn.style.backgroundColor = '#fff';
+        btn.style.borderColor = '#ced4da';
+        btn.style.color = '#495057';
+        btn.style.padding = '0'; // Reset padding for centering
+        btn.style.width = '35px'; // Match min-width of offset buttons
+        btn.style.height = '20px'; // Match approximate height of offset buttons
+        btn.style.minWidth = '35px';
+        btn.style.display = 'flex';
+        btn.style.alignItems = 'center';
+        btn.style.justifyContent = 'center';
+        btn.style.fontSize = '10px'; // Match offset button font size
+
+        // Hover effects
+        btn.onmouseenter = () => { btn.style.backgroundColor = '#e9ecef'; btn.style.borderColor = '#adb5bd'; };
+        btn.onmouseleave = () => { btn.style.backgroundColor = '#fff'; btn.style.borderColor = '#ced4da'; };
+      };
+
+      // 1. Kleiner Button (<) - Context-aware
+      const smallerBtn = document.createElement('button');
+      smallerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>';
+      applyControlStyle(smallerBtn);
+      smallerBtn.title = isFixedMode ? 'Kleinerer Schritt' : 'Vorherige Liste';
+      smallerBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isFixedMode) {
+          settings.offsetButtonStep = getSmallerPreset(settings.offsetButtonStep);
+        } else {
+          settings.customOffsets = getNextPercentagePreset(settings.customOffsets, 'smaller');
+        }
+        injectLimitButtons();
+      };
+
+      // 2. Größer Button (>) - Context-aware
+      const largerBtn = document.createElement('button');
+      largerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+      applyControlStyle(largerBtn);
+      largerBtn.title = isFixedMode ? 'Größerer Schritt' : 'Nächste Liste';
+      largerBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isFixedMode) {
+          settings.offsetButtonStep = getLargerPreset(settings.offsetButtonStep);
+        } else {
+          settings.customOffsets = getNextPercentagePreset(settings.customOffsets, 'larger');
+        }
+        injectLimitButtons();
+      };
+
+      // 3. Mode Toggle Button (€ / %)
+      const modeToggleBtn = document.createElement('button');
       if (isFixedMode) {
-        const controlRow = document.createElement('div');
-        controlRow.className = 'zd-offsets-row';
-        controlRow.style.marginBottom = '4px';
-        controlRow.style.justifyContent = 'flex-end'; // Right align
-        controlRow.style.gap = '4px'; // Small gap
-
-        const applyControlStyle = (btn: HTMLButtonElement) => {
-          btn.className = 'zd-btn zd-step-control-btn'; // Add specific class for exclusion
-          // Match inactive offset button style
-          btn.style.backgroundColor = '#fff';
-          btn.style.borderColor = '#ced4da';
-          btn.style.color = '#495057';
-          btn.style.padding = '0'; // Reset padding for centering
-          btn.style.width = '35px'; // Match min-width of offset buttons
-          btn.style.height = '20px'; // Match approximate height of offset buttons
-          btn.style.minWidth = '35px';
-          btn.style.display = 'flex';
-          btn.style.alignItems = 'center';
-          btn.style.justifyContent = 'center';
-          btn.style.fontSize = '10px'; // Match offset button font size
-
-          // Hover effects
-          btn.onmouseenter = () => { btn.style.backgroundColor = '#e9ecef'; btn.style.borderColor = '#adb5bd'; };
-          btn.onmouseleave = () => { btn.style.backgroundColor = '#fff'; btn.style.borderColor = '#ced4da'; };
-        };
-
-        // Kleiner Button (<)
-        const smallerBtn = document.createElement('button');
-        // Use standard stroke color #495057 to match text
-        smallerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>';
-        applyControlStyle(smallerBtn);
-        smallerBtn.title = 'Kleinerer Schritt';
-        smallerBtn.onclick = (e) => {
-          e.preventDefault();
-          e.stopPropagation(); // No auto-check
-          const newStep = getSmallerPreset(settings.offsetButtonStep);
-          settings.offsetButtonStep = newStep;
-          injectLimitButtons();
-        };
-
-        // Größer Button (>)
-        const largerBtn = document.createElement('button');
-        largerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
-        applyControlStyle(largerBtn);
-        largerBtn.title = 'Größerer Schritt';
-        largerBtn.onclick = (e) => {
-          e.preventDefault();
-          e.stopPropagation(); // No auto-check
-          const newStep = getLargerPreset(settings.offsetButtonStep);
-          settings.offsetButtonStep = newStep;
-          injectLimitButtons();
-        };
-
-        // Speichern Button (Floppy)
-        const saveBtn = document.createElement('button');
-        saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
-        applyControlStyle(saveBtn);
-        saveBtn.title = 'Als Standard speichern';
-        saveBtn.onclick = async (e) => {
-          e.preventDefault();
-          e.stopPropagation(); // No auto-check
-          try {
-            if (chrome.runtime?.id) {
-              await chrome.storage.local.set({
-                offsetButtonStep: settings.offsetButtonStep
-              });
-              // Visual feedback (Check icon)
-              saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-              setTimeout(() => {
-                saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
-              }, 1500);
-            }
-          } catch (err) {
-            console.warn('Zero Tools: Could not save step size');
-          }
-        };
-
-        controlRow.appendChild(smallerBtn);
-        controlRow.appendChild(largerBtn);
-        controlRow.appendChild(saveBtn);
-        group.appendChild(controlRow);
+        modeToggleBtn.innerHTML = '<span style="font-weight: bold; font-size: 11px;">€ <span style="opacity: 0.35;">/</span> <span style="opacity: 0.35;">%</span></span>';
+      } else {
+        modeToggleBtn.innerHTML = '<span style="font-weight: bold; font-size: 11px;"><span style="opacity: 0.35;">€</span> <span style="opacity: 0.35;">/</span> %</span>';
       }
+      applyControlStyle(modeToggleBtn);
+      modeToggleBtn.title = 'Modus wechseln';
+      modeToggleBtn.style.width = '40px'; // Slightly wider for text
+      modeToggleBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        settings.offsetButtonMode = isFixedMode ? 'percentage' : 'fixed';
+        injectLimitButtons();
+      };
 
-      // For fixed mode, group buttons into rows of 5
+      // 4. Row Count Cycler (Z)
+      const rowCycleBtn = document.createElement('button');
+      rowCycleBtn.textContent = 'Z';
+      rowCycleBtn.style.fontWeight = 'bold';
+      applyControlStyle(rowCycleBtn);
+      rowCycleBtn.title = 'Zeilenanzahl ändern';
+      rowCycleBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        settings.offsetButtonCount = cycleButtonCount(settings.offsetButtonCount);
+        injectLimitButtons();
+      };
+
+      // 5. Speichern Button (Floppy)
+      const saveBtn = document.createElement('button');
+      saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
+      applyControlStyle(saveBtn);
+      saveBtn.title = 'Als Standard speichern';
+      saveBtn.onclick = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          if (chrome.runtime?.id) {
+            await chrome.storage.local.set({
+              offsetButtonStep: settings.offsetButtonStep,
+              customOffsets: settings.customOffsets,
+              offsetButtonMode: settings.offsetButtonMode,
+              offsetButtonCount: settings.offsetButtonCount
+            });
+            // Visual feedback (Check icon)
+            saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+            setTimeout(() => {
+              saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
+            }, 1500);
+          }
+        } catch (err) {
+          console.warn('Zero Tools: Could not save settings');
+        }
+      };
+
+      // Append in order: < > €/% Z Speichern
+      controlRow.appendChild(smallerBtn);
+      controlRow.appendChild(largerBtn);
+      controlRow.appendChild(modeToggleBtn);
+      controlRow.appendChild(rowCycleBtn);
+      controlRow.appendChild(saveBtn);
+      group.appendChild(controlRow);
+
+      // Group buttons into rows of 5
+      const buttonsPerRow = 5;
+
+      // Fixed mode: buttons are already generated in reverse (largest first)
+      // Percentage mode: buttons are generated in normal order (smallest first), so we need to reverse
       if (isFixedMode) {
-        const buttonsPerRow = 5;
-
-        // Render positive buttons in rows - SMALLEST VALUES FIRST (closest to main button)
-        // We need to reverse the order: start from beginning and go up
+        // Fixed mode: render in order (already reversed in generation)
         for (let i = 0; i < positiveButtons.length; i += buttonsPerRow) {
           const row = document.createElement('div');
           row.className = 'zd-offsets-row';
@@ -1030,13 +1107,17 @@ const injectLimitButtons = () => {
           group.appendChild(row);
         }
       } else {
-        // Percentage mode: single row of positive buttons
-        if (positiveButtons.length > 0) {
+        // Percentage mode: render in reverse to get largest at top
+        for (let i = positiveButtons.length - 1; i >= 0; i -= buttonsPerRow) {
           const row = document.createElement('div');
           row.className = 'zd-offsets-row';
-          positiveButtons.forEach(btnData => {
+
+          const startIdx = Math.max(0, i - buttonsPerRow + 1);
+          for (let j = startIdx; j <= i; j++) {
+            const btnData = positiveButtons[j];
             row.appendChild(createOffsetBtn(priceType, btnData.offset, btnData.label, isFixedMode));
-          });
+          }
+
           group.appendChild(row);
         }
       }
@@ -1044,33 +1125,18 @@ const injectLimitButtons = () => {
       // Main Button
       group.appendChild(createBtn(label, priceType));
 
-      // Negative buttons
-      if (isFixedMode) {
-        const buttonsPerRow = 5;
+      // Negative buttons in rows (top to bottom)
+      for (let i = 0; i < negativeButtons.length; i += buttonsPerRow) {
+        const row = document.createElement('div');
+        row.className = 'zd-offsets-row';
 
-        // Render negative buttons in rows (top to bottom)
-        for (let i = 0; i < negativeButtons.length; i += buttonsPerRow) {
-          const row = document.createElement('div');
-          row.className = 'zd-offsets-row';
-
-          const endIdx = Math.min(negativeButtons.length, i + buttonsPerRow);
-          for (let j = i; j < endIdx; j++) {
-            const btnData = negativeButtons[j];
-            row.appendChild(createOffsetBtn(priceType, -btnData.offset, btnData.label, isFixedMode));
-          }
-
-          group.appendChild(row);
+        const endIdx = Math.min(negativeButtons.length, i + buttonsPerRow);
+        for (let j = i; j < endIdx; j++) {
+          const btnData = negativeButtons[j];
+          row.appendChild(createOffsetBtn(priceType, -btnData.offset, btnData.label, isFixedMode));
         }
-      } else {
-        // Percentage mode: single row of negative buttons
-        if (negativeButtons.length > 0) {
-          const row = document.createElement('div');
-          row.className = 'zd-offsets-row';
-          negativeButtons.forEach(btnData => {
-            row.appendChild(createOffsetBtn(priceType, -btnData.offset, btnData.label, isFixedMode));
-          });
-          group.appendChild(row);
-        }
+
+        group.appendChild(row);
       }
     } else {
       // No offset buttons, just main button
@@ -1209,97 +1275,141 @@ const injectConfirmPageButtons = () => {
     const positiveButtons = buttonData.filter(b => b.isPositive);
     const negativeButtons = buttonData.filter(b => !b.isPositive);
 
-    // Step Control Buttons (only in fixed mode)
+    // Control Buttons (for both fixed and percentage modes)
+    const controlRow = document.createElement('div');
+    controlRow.className = 'zd-offsets-row';
+    controlRow.style.marginBottom = '4px';
+    controlRow.style.justifyContent = 'flex-end'; // Right align
+    controlRow.style.gap = '4px'; // Small gap
+
+    const applyControlStyle = (btn: HTMLButtonElement) => {
+      btn.className = 'zd-btn zd-step-control-btn'; // Add specific class for exclusion
+      // Match inactive offset button style
+      btn.style.backgroundColor = '#fff';
+      btn.style.borderColor = '#ced4da';
+      btn.style.color = '#495057';
+      btn.style.padding = '0'; // Reset padding for centering
+      btn.style.width = '35px'; // Match min-width of offset buttons
+      btn.style.height = '20px'; // Match approximate height of offset buttons
+      btn.style.minWidth = '35px';
+      btn.style.display = 'flex';
+      btn.style.alignItems = 'center';
+      btn.style.justifyContent = 'center';
+      btn.style.fontSize = '10px'; // Match offset button font size
+
+      // Hover effects
+      btn.onmouseenter = () => { btn.style.backgroundColor = '#e9ecef'; btn.style.borderColor = '#adb5bd'; };
+      btn.onmouseleave = () => { btn.style.backgroundColor = '#fff'; btn.style.borderColor = '#ced4da'; };
+    };
+
+    // 1. Kleiner Button (<) - Context-aware
+    const smallerBtn = document.createElement('button');
+    smallerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>';
+    applyControlStyle(smallerBtn);
+    smallerBtn.title = isFixedMode ? 'Kleinerer Schritt' : 'Vorherige Liste';
+    smallerBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isFixedMode) {
+        settings.offsetButtonStep = getSmallerPreset(settings.offsetButtonStep);
+      } else {
+        settings.customOffsets = getNextPercentagePreset(settings.customOffsets, 'smaller');
+      }
+      document.querySelector('.zero-delay-confirm-controls')?.remove();
+      injectConfirmPageButtons();
+    };
+
+    // 2. Größer Button (>) - Context-aware
+    const largerBtn = document.createElement('button');
+    largerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+    applyControlStyle(largerBtn);
+    largerBtn.title = isFixedMode ? 'Größerer Schritt' : 'Nächste Liste';
+    largerBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isFixedMode) {
+        settings.offsetButtonStep = getLargerPreset(settings.offsetButtonStep);
+      } else {
+        settings.customOffsets = getNextPercentagePreset(settings.customOffsets, 'larger');
+      }
+      document.querySelector('.zero-delay-confirm-controls')?.remove();
+      injectConfirmPageButtons();
+    };
+
+    // 3. Mode Toggle Button (€ / %)
+    const modeToggleBtn = document.createElement('button');
     if (isFixedMode) {
-      const controlRow = document.createElement('div');
-      controlRow.className = 'zd-offsets-row';
-      controlRow.style.marginBottom = '4px';
-      controlRow.style.justifyContent = 'flex-end'; // Right align
-      controlRow.style.gap = '4px'; // Small gap
-
-      const applyControlStyle = (btn: HTMLButtonElement) => {
-        btn.className = 'zd-btn zd-step-control-btn'; // Add specific class for exclusion
-        // Match inactive offset button style
-        btn.style.backgroundColor = '#fff';
-        btn.style.borderColor = '#ced4da';
-        btn.style.color = '#495057';
-        btn.style.padding = '0'; // Reset padding for centering
-        btn.style.width = '35px'; // Match min-width of offset buttons
-        btn.style.height = '20px'; // Match approximate height of offset buttons
-        btn.style.minWidth = '35px';
-        btn.style.display = 'flex';
-        btn.style.alignItems = 'center';
-        btn.style.justifyContent = 'center';
-        btn.style.fontSize = '10px'; // Match offset button font size
-
-        // Hover effects
-        btn.onmouseenter = () => { btn.style.backgroundColor = '#e9ecef'; btn.style.borderColor = '#adb5bd'; };
-        btn.onmouseleave = () => { btn.style.backgroundColor = '#fff'; btn.style.borderColor = '#ced4da'; };
-      };
-
-      // Kleiner Button (<)
-      const smallerBtn = document.createElement('button');
-      smallerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>';
-      applyControlStyle(smallerBtn);
-      smallerBtn.title = 'Kleinerer Schritt';
-      smallerBtn.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation(); // No auto-check
-        const newStep = getSmallerPreset(settings.offsetButtonStep);
-        settings.offsetButtonStep = newStep;
-        document.querySelector('.zero-delay-confirm-controls')?.remove();
-        injectConfirmPageButtons();
-      };
-
-      // Größer Button (>)
-      const largerBtn = document.createElement('button');
-      largerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
-      applyControlStyle(largerBtn);
-      largerBtn.title = 'Größerer Schritt';
-      largerBtn.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation(); // No auto-check
-        const newStep = getLargerPreset(settings.offsetButtonStep);
-        settings.offsetButtonStep = newStep;
-        document.querySelector('.zero-delay-confirm-controls')?.remove();
-        injectConfirmPageButtons();
-      };
-
-      // Speichern Button (Floppy)
-      const saveBtn = document.createElement('button');
-      saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
-      applyControlStyle(saveBtn);
-      saveBtn.title = 'Als Standard speichern';
-      saveBtn.onclick = async (e) => {
-        e.preventDefault();
-        e.stopPropagation(); // No auto-check
-        try {
-          if (chrome.runtime?.id) {
-            await chrome.storage.local.set({
-              offsetButtonStep: settings.offsetButtonStep
-            });
-            // Visual feedback (Check icon)
-            saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-            setTimeout(() => {
-              saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
-            }, 1500);
-          }
-        } catch (err) {
-          console.warn('Zero Tools: Could not save step size');
-        }
-      };
-
-      controlRow.appendChild(smallerBtn);
-      controlRow.appendChild(largerBtn);
-      controlRow.appendChild(saveBtn);
-      group.appendChild(controlRow);
+      modeToggleBtn.innerHTML = '<span style="font-weight: bold; font-size: 11px;">€ <span style="opacity: 0.35;">/</span> <span style="opacity: 0.35;">%</span></span>';
+    } else {
+      modeToggleBtn.innerHTML = '<span style="font-weight: bold; font-size: 11px;"><span style="opacity: 0.35;">€</span> <span style="opacity: 0.35;">/</span> %</span>';
     }
+    applyControlStyle(modeToggleBtn);
+    modeToggleBtn.title = 'Modus wechseln';
+    modeToggleBtn.style.width = '40px'; // Slightly wider for text
+    modeToggleBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      settings.offsetButtonMode = isFixedMode ? 'percentage' : 'fixed';
+      document.querySelector('.zero-delay-confirm-controls')?.remove();
+      injectConfirmPageButtons();
+    };
 
-    // For fixed mode, group buttons into rows of 5
+    // 4. Row Count Cycler (Z)
+    const rowCycleBtn = document.createElement('button');
+    rowCycleBtn.textContent = 'Z';
+    rowCycleBtn.style.fontWeight = 'bold';
+    applyControlStyle(rowCycleBtn);
+    rowCycleBtn.title = 'Zeilenanzahl ändern';
+    rowCycleBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      settings.offsetButtonCount = cycleButtonCount(settings.offsetButtonCount);
+      document.querySelector('.zero-delay-confirm-controls')?.remove();
+      injectConfirmPageButtons();
+    };
+
+    // 5. Speichern Button (Floppy)
+    const saveBtn = document.createElement('button');
+    saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
+    applyControlStyle(saveBtn);
+    saveBtn.title = 'Als Standard speichern';
+    saveBtn.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        if (chrome.runtime?.id) {
+          await chrome.storage.local.set({
+            offsetButtonStep: settings.offsetButtonStep,
+            customOffsets: settings.customOffsets,
+            offsetButtonMode: settings.offsetButtonMode,
+            offsetButtonCount: settings.offsetButtonCount
+          });
+          // Visual feedback (Check icon)
+          saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+          setTimeout(() => {
+            saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
+          }, 1500);
+        }
+      } catch (err) {
+        console.warn('Zero Tools: Could not save settings');
+      }
+    };
+
+    // Append in order: < > €/% Z Speichern
+    controlRow.appendChild(smallerBtn);
+    controlRow.appendChild(largerBtn);
+    controlRow.appendChild(modeToggleBtn);
+    controlRow.appendChild(rowCycleBtn);
+    controlRow.appendChild(saveBtn);
+    group.appendChild(controlRow);
+
+    // Group buttons into rows of 5
+    const buttonsPerRow = 5;
+
+    // Fixed mode: buttons are already generated in reverse (largest first)
+    // Percentage mode: buttons are generated in normal order (smallest first), so we need to reverse
     if (isFixedMode) {
-      const buttonsPerRow = 5;
-
-      // Render positive buttons in rows - SMALLEST VALUES FIRST (closest to main button)
+      // Fixed mode: render in order (already reversed in generation)
       for (let i = 0; i < positiveButtons.length; i += buttonsPerRow) {
         const row = document.createElement('div');
         row.className = 'zd-offsets-row';
@@ -1313,13 +1423,17 @@ const injectConfirmPageButtons = () => {
         group.appendChild(row);
       }
     } else {
-      // Percentage mode: single row of positive buttons
-      if (positiveButtons.length > 0) {
+      // Percentage mode: render in reverse to get largest at top
+      for (let i = positiveButtons.length - 1; i >= 0; i -= buttonsPerRow) {
         const row = document.createElement('div');
         row.className = 'zd-offsets-row';
-        positiveButtons.forEach(btnData => {
+
+        const startIdx = Math.max(0, i - buttonsPerRow + 1);
+        for (let j = startIdx; j <= i; j++) {
+          const btnData = positiveButtons[j];
           row.appendChild(createConfirmOffsetBtn(btnData.label, btnData.offset, isFixedMode));
-        });
+        }
+
         group.appendChild(row);
       }
     }
@@ -1336,32 +1450,20 @@ const injectConfirmPageButtons = () => {
     const isFixedMode = settings.offsetButtonMode === 'fixed';
     const negativeButtons = buttonData.filter(b => !b.isPositive);
 
-    if (isFixedMode) {
-      const buttonsPerRow = 5;
+    const buttonsPerRow = 5;
 
-      // Render negative buttons in rows (top to bottom)
-      for (let i = 0; i < negativeButtons.length; i += buttonsPerRow) {
-        const row = document.createElement('div');
-        row.className = 'zd-offsets-row';
+    // Render negative buttons in rows (top to bottom)
+    for (let i = 0; i < negativeButtons.length; i += buttonsPerRow) {
+      const row = document.createElement('div');
+      row.className = 'zd-offsets-row';
 
-        const endIdx = Math.min(negativeButtons.length, i + buttonsPerRow);
-        for (let j = i; j < endIdx; j++) {
-          const btnData = negativeButtons[j];
-          row.appendChild(createConfirmOffsetBtn(btnData.label, -btnData.offset, isFixedMode));
-        }
-
-        group.appendChild(row);
+      const endIdx = Math.min(negativeButtons.length, i + buttonsPerRow);
+      for (let j = i; j < endIdx; j++) {
+        const btnData = negativeButtons[j];
+        row.appendChild(createConfirmOffsetBtn(btnData.label, -btnData.offset, isFixedMode));
       }
-    } else {
-      // Percentage mode: single row of negative buttons
-      if (negativeButtons.length > 0) {
-        const row = document.createElement('div');
-        row.className = 'zd-offsets-row';
-        negativeButtons.forEach(btnData => {
-          row.appendChild(createConfirmOffsetBtn(btnData.label, -btnData.offset, isFixedMode));
-        });
-        group.appendChild(row);
-      }
+
+      group.appendChild(row);
     }
   }
 
@@ -1963,11 +2065,16 @@ const getCalculatedPrice = (btn: HTMLElement, offset: number, isFixedMode: boole
 const formatButtonLabel = (label: string): string => {
   if (label.indexOf(',') === -1) return label;
 
-  const parts = label.split(',');
-  if (parts[1].length > 2) {
+  // Extract % symbol if present
+  const hasPercent = label.endsWith('%');
+  const numericPart = hasPercent ? label.slice(0, -1) : label;
+
+  const parts = numericPart.split(',');
+  if (parts[1] && parts[1].length > 2) {
     const mainDecimals = parts[1].substring(0, 2);
     const faintDecimals = parts[1].substring(2);
-    return `${parts[0]},${mainDecimals}<span style="opacity: 0.5;">${faintDecimals}</span>`;
+    const formatted = `${parts[0]},${mainDecimals}<span style="opacity: 0.5;">${faintDecimals}</span>`;
+    return hasPercent ? formatted + '%' : formatted;
   }
   return label;
 };
@@ -2095,6 +2202,12 @@ const addTooltipToButton = (btn: HTMLButtonElement, offset: number, isFixedMode:
     }
     tooltip.style.display = 'block';
     updateTooltip();
+
+    // Clear any existing interval and start new one (use global interval)
+    if (tooltipUpdateInterval) clearInterval(tooltipUpdateInterval);
+    tooltipUpdateInterval = window.setInterval(() => {
+      updateTooltip();
+    }, 100); // Update every 100ms to catch live price changes
   };
 
   btn.onmousemove = (e) => {
@@ -2102,7 +2215,6 @@ const addTooltipToButton = (btn: HTMLButtonElement, offset: number, isFixedMode:
     if (tooltip) {
       tooltip.style.left = e.clientX + 'px';
       tooltip.style.top = (e.clientY - 45) + 'px';
-      updateTooltip(); // Update content on move to reflect current price
     }
   };
 
@@ -2110,6 +2222,11 @@ const addTooltipToButton = (btn: HTMLButtonElement, offset: number, isFixedMode:
     const tooltip = document.getElementById('zd-tooltip-el');
     if (tooltip) {
       tooltip.style.display = 'none';
+    }
+    // Clear global interval on mouse leave
+    if (tooltipUpdateInterval) {
+      clearInterval(tooltipUpdateInterval);
+      tooltipUpdateInterval = null;
     }
   };
 };

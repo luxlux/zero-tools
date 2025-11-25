@@ -62,7 +62,7 @@ const defaultSettings: Settings = {
   autoCheckEnabled: false,
   offsetButtonsEnabled: false,
   offsetButtonMode: 'percentage',
-  customOffsets: '0,1%; 0,2%; 0,5%; 1,0%',
+  customOffsets: 'standard', // Now stores preset key
   offsetButtonStep: 0.05,
   offsetButtonCount: 20,
   limitAdjusterEnabled: true,
@@ -334,6 +334,22 @@ const App: React.FC = () => {
 
                 {settings.offsetButtonsEnabled && (
                   <div className="space-y-3 animate-fade-in">
+                    {/* Button Count - NOW FIRST, applies to both modes */}
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Anzahl Buttons (gilt für beide Modi)</label>
+                      <select
+                        value={settings.offsetButtonCount}
+                        onChange={(e) => updateSettings({ ...settings, offsetButtonCount: parseInt(e.target.value) })}
+                        className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none"
+                      >
+                        <option value="10">10 (2 Zeilen)</option>
+                        <option value="20">20 (4 Zeilen)</option>
+                        <option value="30">30 (6 Zeilen)</option>
+                        <option value="40">40 (8 Zeilen)</option>
+                        <option value="50">50 (10 Zeilen)</option>
+                      </select>
+                    </div>
+
                     {/* Mode Toggle */}
                     <div>
                       <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Modus</label>
@@ -362,14 +378,18 @@ const App: React.FC = () => {
                     {/* Percentage Mode Settings */}
                     {settings.offsetButtonMode === 'percentage' && (
                       <div className="space-y-1 animate-fade-in">
-                        <label className="text-[10px] font-bold uppercase text-slate-500">Prozentwerte (mit Semikolon getrennt)</label>
-                        <input
-                          type="text"
+                        <label className="text-[10px] font-bold uppercase text-slate-500">Prozent-Liste</label>
+                        <select
                           value={settings.customOffsets}
                           onChange={(e) => updateSettings({ ...settings, customOffsets: e.target.value })}
                           className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none"
-                          placeholder="0,1; 0,5; 1,0"
-                        />
+                        >
+                          <option value="fine-small">Fein (Klein): 0,1% - 50%</option>
+                          <option value="fine-medium">Fein (Mittel): 0,2% - 200%</option>
+                          <option value="standard">Standard: 0,5% - 300%</option>
+                          <option value="coarse">Grob: 1% - 500%</option>
+                          <option value="very-coarse">Sehr Grob: 2% - 500%</option>
+                        </select>
                       </div>
                     )}
 
@@ -389,22 +409,6 @@ const App: React.FC = () => {
                                 {preset.replace('.', ',')} €
                               </option>
                             ))}
-                          </select>
-                        </div>
-
-                        {/* Button Count */}
-                        <div>
-                          <label className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">Anzahl Buttons</label>
-                          <select
-                            value={settings.offsetButtonCount}
-                            onChange={(e) => updateSettings({ ...settings, offsetButtonCount: parseInt(e.target.value) })}
-                            className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none"
-                          >
-                            <option value="10">10 (2 Zeilen)</option>
-                            <option value="20">20 (4 Zeilen)</option>
-                            <option value="30">30 (6 Zeilen)</option>
-                            <option value="40">40 (8 Zeilen)</option>
-                            <option value="50">50 (10 Zeilen)</option>
                           </select>
                         </div>
 
