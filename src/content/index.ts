@@ -323,6 +323,51 @@ document.addEventListener('keydown', (e) => {
     isShiftHeld = true;
     updateUIState();
   }
+
+  // F key toggles Fix mode (only if not in input field)
+  if (e.key === 'f' || e.key === 'F') {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+    e.preventDefault();
+
+    if (isFixedPriceMode) {
+      deactivateFixedPriceMode();
+    } else {
+      // Check both Order Input and Confirm page containers
+      const orderInputContainer = document.querySelector('.zero-delay-limit-controls');
+      const confirmContainer = document.querySelector('.zero-delay-confirm-controls');
+      const container = orderInputContainer || confirmContainer;
+
+      if (container) {
+        if (confirmContainer) {
+          // Confirm page always uses 'single'
+          activateFixedPriceMode('single');
+        } else {
+          // Order Input page - check price type
+          const hasBid = container.getAttribute('data-has-bid') === 'true';
+          const hasAsk = container.getAttribute('data-has-ask') === 'true';
+          const hasSingle = container.getAttribute('data-has-single') === 'true';
+
+          if (hasSingle) {
+            activateFixedPriceMode('single');
+          } else if (hasBid) {
+            activateFixedPriceMode('bid');
+          } else if (hasAsk) {
+            activateFixedPriceMode('ask');
+          }
+        }
+      }
+    }
+
+    // Refresh the appropriate page
+    if (document.querySelector('.zero-delay-confirm-controls')) {
+      document.querySelector('.zero-delay-confirm-controls')?.remove();
+      injectConfirmPageButtons();
+    } else {
+      injectLimitButtons();
+    }
+  }
 });
 
 document.addEventListener('keyup', (e) => {
@@ -562,6 +607,59 @@ const cycleButtonCount = (current: number): number => {
 // Global tooltip update interval
 let tooltipUpdateInterval: number | null = null;
 
+// Fixed price mode state (temporary, not persisted)
+let isFixedPriceMode = false;
+let fixedBasePrice: { bid?: string; ask?: string; single?: string } = {};
+let fixedOffsetPrices: Map<string, string> = new Map();
+let currentPage: 'order' | 'confirm' | null = null;
+
+
+
+// Helper: Activate fixed price mode - freezes current price and calculates all offsets
+const activateFixedPriceMode = (priceType: 'bid' | 'ask' | 'single') => {
+  isFixedPriceMode = true;
+  fixedOffsetPrices.clear();
+
+  // Store base price - check both Order Input and Confirm page containers
+  const controls = document.querySelector('.zero-delay-limit-controls') || document.querySelector('.zero-delay-confirm-controls');
+  if (!controls) return;
+
+  const basePrice = controls.getAttribute(`data-${priceType}`) || controls.getAttribute('data-current-price');
+  if (!basePrice) return;
+
+  fixedBasePrice[priceType] = basePrice;
+
+  // Calculate and store all offset prices
+  const buttonData = generateOffsetButtonData();
+  const isFixedMode = settings.offsetButtonMode === 'fixed';
+  const base = parseFloat(basePrice);
+  const decimals = basePrice.indexOf('.') >= 0 ? basePrice.split('.')[1].length : 2; // Use actual decimals, not Math.max
+
+  buttonData.forEach(btn => {
+    let newPrice: number;
+    const offset = btn.isPositive ? btn.offset : -btn.offset;
+
+    if (isFixedMode) {
+      newPrice = base + offset;
+    } else {
+      newPrice = base * (1 + offset / 100);
+    }
+
+    // Skip negative prices
+    if (newPrice <= 0) return;
+
+    const key = `${btn.isPositive ? '+' : '-'}${btn.offset}`;
+    fixedOffsetPrices.set(key, newPrice.toFixed(decimals));
+  });
+};
+
+// Helper: Deactivate fixed price mode
+const deactivateFixedPriceMode = () => {
+  isFixedPriceMode = false;
+  fixedBasePrice = {};
+  fixedOffsetPrices.clear();
+};
+
 /**
  * Generate offset button data for both percentage and fixed modes
  * Returns array of {offset, label, isPositive} objects
@@ -634,6 +732,12 @@ const injectLimitButtons = () => {
   const container = document.querySelector('trade-create-quote') || document.querySelector('div[data-zid="quote-container"]');
   if (!container) return;
 
+  // Detect page switch - ONLY if we are actually on the order page
+  if (currentPage === 'confirm') {
+    deactivateFixedPriceMode();
+  }
+  currentPage = 'order';
+
   if (!settings.featureTwoEnabled) {
     container.querySelector('.zero-delay-limit-controls')?.remove();
     return;
@@ -678,7 +782,8 @@ const injectLimitButtons = () => {
     offsetMode: settings.offsetButtonMode,
     offsetStep: settings.offsetButtonStep.toString(),
     offsetCount: settings.offsetButtonCount.toString(),
-    offsets: settings.customOffsets
+    offsets: settings.customOffsets,
+    fixedPriceMode: isFixedPriceMode  // ADD THIS!
   };
 
   let controls = container.querySelector('.zero-delay-limit-controls') as HTMLElement;
@@ -694,7 +799,8 @@ const injectLimitButtons = () => {
       offsetMode: controls.getAttribute('data-offset-mode') || 'percentage',
       offsetStep: controls.getAttribute('data-offset-step') || '0.05',
       offsetCount: controls.getAttribute('data-offset-count') || '20',
-      offsets: controls.getAttribute('data-offsets') || ''
+      offsets: controls.getAttribute('data-offsets') || '',
+      fixedPriceMode: controls.getAttribute('data-fixed-price-mode') === 'true'  // ADD THIS!
     };
 
     // If only prices changed, just update data attributes and return
@@ -707,7 +813,8 @@ const injectLimitButtons = () => {
       structuralState.offsetMode === currentStructure.offsetMode &&
       structuralState.offsetStep === currentStructure.offsetStep &&
       structuralState.offsetCount === currentStructure.offsetCount &&
-      structuralState.offsets === currentStructure.offsets
+      structuralState.offsets === currentStructure.offsets &&
+      structuralState.fixedPriceMode === currentStructure.fixedPriceMode  // ADD THIS!
     ) {
       // Just update price data
       if (bidPriceStr) controls.setAttribute('data-bid', bidPriceStr);
@@ -755,6 +862,7 @@ const injectLimitButtons = () => {
   controls.setAttribute('data-offset-step', structuralState.offsetStep);
   controls.setAttribute('data-offset-count', structuralState.offsetCount);
   controls.setAttribute('data-offsets', structuralState.offsets);
+  controls.setAttribute('data-fixed-price-mode', structuralState.fixedPriceMode.toString());  // ADD THIS!
   if (bidPriceStr) controls.setAttribute('data-bid', bidPriceStr);
   if (askPriceStr) controls.setAttribute('data-ask', askPriceStr);
   if (singlePriceStr) controls.setAttribute('data-single', singlePriceStr);
@@ -849,21 +957,42 @@ const injectLimitButtons = () => {
 
   const createBtn = (label: string, priceType: 'bid' | 'ask' | 'single') => {
     const btn = document.createElement('button');
-    btn.setAttribute('data-original-text', label);
+
+    // Show fixed base price or normal label
+    let displayText: string;
+    if (isFixedPriceMode && fixedBasePrice[priceType]) {
+      displayText = fixedBasePrice[priceType]!.replace('.', ',') + ' als Limit';
+    } else {
+      displayText = label;
+    }
+
+    // IMPORTANT: Use displayText for data-original-text so updateUIState doesn't override it
+    btn.setAttribute('data-original-text', displayText);
     btn.setAttribute('data-price-type', priceType);
 
     // Initial state
     if (isAutoCheck || isShiftHeld) {
-      btn.textContent = `${label} & Prüfen`;
+      if (isFixedPriceMode && fixedBasePrice[priceType]) {
+        btn.innerHTML = formatButtonLabel(displayText) + ' & Prüfen';
+      } else {
+        btn.textContent = `${displayText} & Prüfen`;
+      }
       btn.classList.add('zd-btn-primary');
     } else {
-      btn.textContent = label;
+      if (isFixedPriceMode && fixedBasePrice[priceType]) {
+        btn.innerHTML = formatButtonLabel(displayText);
+      } else {
+        btn.textContent = displayText;
+      }
     }
 
     btn.className = 'zd-btn';
     btn.style.width = '100%';
 
-    handleTooltip(btn, priceType);
+    // No tooltip in fixed mode
+    if (!isFixedPriceMode) {
+      handleTooltip(btn, priceType);
+    }
 
     btn.onclick = (e) => {
       e.preventDefault();
@@ -874,9 +1003,16 @@ const injectLimitButtons = () => {
 
       btn.blur(); // Remove focus outline
 
-      // Get current price from container
-      const controls = btn.closest('.zero-delay-limit-controls');
-      const priceStr = controls?.getAttribute(`data-${priceType}`);
+      let priceStr: string | null | undefined;
+
+      if (isFixedPriceMode && fixedBasePrice[priceType]) {
+        priceStr = fixedBasePrice[priceType];
+      } else {
+        // Get current price from container
+        const controls = btn.closest('.zero-delay-limit-controls');
+        priceStr = controls?.getAttribute(`data-${priceType}`);
+      }
+
       if (!priceStr) return;
 
       try {
@@ -902,15 +1038,56 @@ const injectLimitButtons = () => {
     btn.setAttribute('data-offset', offset.toString());
     btn.setAttribute('data-is-fixed-mode', isFixedMode.toString());
 
+    // Determine label based on fixed price mode
+    let displayLabel: string;
+    let isNegativePrice = false;
+    if (isFixedPriceMode) {
+      // Show absolute price without +/-
+      const key = `${offset >= 0 ? '+' : '-'}${Math.abs(offset)}`;
+      const fixedPrice = fixedOffsetPrices.get(key);
+      if (fixedPrice) {
+        displayLabel = fixedPrice.replace('.', ',');
+      } else {
+        // No fixed price means it was negative and filtered out
+        // Use invisible character to maintain button height
+        displayLabel = '\u200B'; // Zero-width space
+        isNegativePrice = true;
+      }
+    } else {
+      displayLabel = label;
+    }
+
     // Initial state
     if (isAutoCheck || isShiftHeld) {
       btn.classList.add('zd-btn-primary');
     }
-    btn.innerHTML = formatButtonLabel(label);
+    btn.innerHTML = formatButtonLabel(displayLabel);
 
     btn.className = 'zd-btn zd-offset-btn';
 
-    handleTooltip(btn, priceType, offset, isFixedMode);
+    // Handle empty (negative) buttons in fixed mode
+    if (isNegativePrice) {
+      btn.style.minHeight = '20px';  // Maintain height even when empty
+      btn.style.opacity = '0.3';     // Visual indication it's disabled
+      btn.style.cursor = 'not-allowed';
+      btn.disabled = true;
+    }
+
+    // Dynamic font sizing for long prices in fixed mode
+    if (isFixedPriceMode) {
+      const digitCount = displayLabel.replace(/[,\s]/g, '').length; // Count digits only
+      if (digitCount > 7) {
+        // Allow button to grow
+        btn.style.width = 'auto';
+      } else if (digitCount > 5) {
+        // Reduce font size to fit
+        btn.style.fontSize = '9px';
+      }
+      // No tooltip in fixed mode
+    } else {
+      // Normal mode: show tooltip
+      handleTooltip(btn, priceType, offset, isFixedMode);
+    }
 
     btn.onclick = (e) => {
       e.preventDefault();
@@ -921,28 +1098,42 @@ const injectLimitButtons = () => {
 
       btn.blur();
 
-      // Get current price and calculate final price
-      const controls = btn.closest('.zero-delay-limit-controls');
-      const basePriceStr = controls?.getAttribute(`data-${priceType}`);
-      if (!basePriceStr) return;
+      // In fixed price mode, use the stored fixed price
+      let finalPriceStr: string;
 
-      const basePrice = parseFloat(basePriceStr);
-      const decimals = Math.max(basePriceStr.indexOf('.') >= 0 ? basePriceStr.split('.')[1].length : 2, 4);
-
-      let newPrice: number;
-      if (isFixedMode) {
-        // Fixed mode: add offset directly
-        newPrice = basePrice + offset;
+      if (isFixedPriceMode) {
+        const key = `${offset >= 0 ? '+' : '-'}${Math.abs(offset)}`;
+        const fixedPrice = fixedOffsetPrices.get(key);
+        if (fixedPrice) {
+          finalPriceStr = fixedPrice;
+        } else {
+          // No fixed price (negative), should not happen as button is disabled
+          return;
+        }
       } else {
-        // Percentage mode: multiply by (1 + offset/100)
-        newPrice = basePrice * (1 + offset / 100);
-      }
+        // Normal mode: calculate from current price
+        const controls = btn.closest('.zero-delay-limit-controls');
+        const basePriceStr = controls?.getAttribute(`data-${priceType}`);
+        if (!basePriceStr) return;
 
-      const newPriceStr = newPrice.toFixed(decimals);
+        const basePrice = parseFloat(basePriceStr);
+        const decimals = Math.max(basePriceStr.indexOf('.') >= 0 ? basePriceStr.split('.')[1].length : 2, 4);
+
+        let newPrice: number;
+        if (isFixedMode) {
+          // Fixed mode: add offset directly
+          newPrice = basePrice + offset;
+        } else {
+          // Percentage mode: multiply by (1 + offset/100)
+          newPrice = basePrice * (1 + offset / 100);
+        }
+
+        finalPriceStr = newPrice.toFixed(decimals);
+      }
 
       try {
         if (chrome.runtime?.id) {
-          setLimitValue(newPriceStr, isAutoCheck || e.shiftKey);
+          setLimitValue(finalPriceStr, isAutoCheck || e.shiftKey);
         }
       } catch (err) {
         console.warn('Zero Tools: Extension context invalidated. Please reload the page.');
@@ -998,6 +1189,7 @@ const injectLimitButtons = () => {
       smallerBtn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        deactivateFixedPriceMode(); // Reset fixed mode
         if (isFixedMode) {
           settings.offsetButtonStep = getSmallerPreset(settings.offsetButtonStep);
         } else {
@@ -1014,6 +1206,7 @@ const injectLimitButtons = () => {
       largerBtn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        deactivateFixedPriceMode(); // Reset fixed mode
         if (isFixedMode) {
           settings.offsetButtonStep = getLargerPreset(settings.offsetButtonStep);
         } else {
@@ -1025,9 +1218,9 @@ const injectLimitButtons = () => {
       // 3. Mode Toggle Button (€ / %)
       const modeToggleBtn = document.createElement('button');
       if (isFixedMode) {
-        modeToggleBtn.innerHTML = '<span style="font-weight: bold; font-size: 11px;">€ <span style="opacity: 0.35;">/</span> <span style="opacity: 0.35;">%</span></span>';
+        modeToggleBtn.innerHTML = '<span style="font-size: 11px;">€ <span style="opacity: 0.35;">/</span> <span style="opacity: 0.35;">%</span></span>';
       } else {
-        modeToggleBtn.innerHTML = '<span style="font-weight: bold; font-size: 11px;"><span style="opacity: 0.35;">€</span> <span style="opacity: 0.35;">/</span> %</span>';
+        modeToggleBtn.innerHTML = '<span style="font-size: 11px;"><span style="opacity: 0.35;">€</span> <span style="opacity: 0.35;">/</span> %</span>';
       }
       applyControlStyle(modeToggleBtn);
       modeToggleBtn.title = 'Modus wechseln';
@@ -1035,24 +1228,59 @@ const injectLimitButtons = () => {
       modeToggleBtn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        deactivateFixedPriceMode(); // Reset fixed mode
         settings.offsetButtonMode = isFixedMode ? 'percentage' : 'fixed';
         injectLimitButtons();
       };
 
-      // 4. Row Count Cycler (Z)
+      // 4. Fix Button
+      const fixBtn = document.createElement('button');
+      fixBtn.textContent = 'Fix';
+      applyControlStyle(fixBtn);
+      fixBtn.title = 'Preise auf offset Buttons fixieren, Taste: F';
+
+      // Update styling based on state
+      if (isFixedPriceMode) {
+        fixBtn.style.backgroundColor = '#000';
+        fixBtn.style.color = '#fff';
+        fixBtn.style.borderColor = '#000';
+        fixBtn.onmouseenter = () => {
+          fixBtn.style.backgroundColor = '#333';
+          fixBtn.style.borderColor = '#333';
+        };
+        fixBtn.onmouseleave = () => {
+          fixBtn.style.backgroundColor = '#000';
+          fixBtn.style.borderColor = '#000';
+        };
+      }
+
+      fixBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (isFixedPriceMode) {
+          deactivateFixedPriceMode();
+        } else {
+          activateFixedPriceMode(priceType);
+        }
+
+        injectLimitButtons(); // Refresh to show new labels
+      };
+
+      // 5. Row Count Cycler (Z)
       const rowCycleBtn = document.createElement('button');
       rowCycleBtn.textContent = 'Z';
-      rowCycleBtn.style.fontWeight = 'bold';
       applyControlStyle(rowCycleBtn);
       rowCycleBtn.title = 'Zeilenanzahl ändern';
       rowCycleBtn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        deactivateFixedPriceMode(); // Reset fixed mode
         settings.offsetButtonCount = cycleButtonCount(settings.offsetButtonCount);
         injectLimitButtons();
       };
 
-      // 5. Speichern Button (Floppy)
+      // 6. Speichern Button (Floppy)
       const saveBtn = document.createElement('button');
       saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
       applyControlStyle(saveBtn);
@@ -1079,10 +1307,11 @@ const injectLimitButtons = () => {
         }
       };
 
-      // Append in order: < > €/% Z Speichern
+      // Append in order: < > €/% Fix Z Speichern
       controlRow.appendChild(smallerBtn);
       controlRow.appendChild(largerBtn);
       controlRow.appendChild(modeToggleBtn);
+      controlRow.appendChild(fixBtn);
       controlRow.appendChild(rowCycleBtn);
       controlRow.appendChild(saveBtn);
       group.appendChild(controlRow);
@@ -1162,7 +1391,6 @@ const injectLimitButtons = () => {
   } else if (structuralState.hasSingle) {
     controls.appendChild(createPriceGroup('Kurs als Limit', 'single'));
   }
-
   // Update UI state to ensure correct initial styling
   updateUIState();
 };
@@ -1172,12 +1400,17 @@ const injectConfirmPageButtons = () => {
   if (!settings.featureTwoEnabled || !settings.confirmPageEnabled) return;
 
   const confirmPage = document.querySelector('trade-confirm');
-  if (!confirmPage || !settings.confirmPageEnabled) {
+  if (!confirmPage) {
     document.querySelector('.zero-delay-confirm-controls')?.remove();
     return;
   }
 
-  // Ensure styles are injected
+  // Detect page switch - ONLY if we are actually on the confirm page
+  if (currentPage === 'order') {
+    deactivateFixedPriceMode();
+  }
+  currentPage = 'confirm';
+
   injectStyles();
 
   // Extract order type and direction
@@ -1310,6 +1543,7 @@ const injectConfirmPageButtons = () => {
     smallerBtn.onclick = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      deactivateFixedPriceMode(); // Reset fixed mode
       if (isFixedMode) {
         settings.offsetButtonStep = getSmallerPreset(settings.offsetButtonStep);
       } else {
@@ -1327,6 +1561,7 @@ const injectConfirmPageButtons = () => {
     largerBtn.onclick = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      deactivateFixedPriceMode(); // Reset fixed mode
       if (isFixedMode) {
         settings.offsetButtonStep = getLargerPreset(settings.offsetButtonStep);
       } else {
@@ -1339,9 +1574,9 @@ const injectConfirmPageButtons = () => {
     // 3. Mode Toggle Button (€ / %)
     const modeToggleBtn = document.createElement('button');
     if (isFixedMode) {
-      modeToggleBtn.innerHTML = '<span style="font-weight: bold; font-size: 11px;">€ <span style="opacity: 0.35;">/</span> <span style="opacity: 0.35;">%</span></span>';
+      modeToggleBtn.innerHTML = '<span style="font-size: 11px;">€ <span style="opacity: 0.35;">/</span> <span style="opacity: 0.35;">%</span></span>';
     } else {
-      modeToggleBtn.innerHTML = '<span style="font-weight: bold; font-size: 11px;"><span style="opacity: 0.35;">€</span> <span style="opacity: 0.35;">/</span> %</span>';
+      modeToggleBtn.innerHTML = '<span style="font-size: 11px;"><span style="opacity: 0.35;">€</span> <span style="opacity: 0.35;">/</span> %</span>';
     }
     applyControlStyle(modeToggleBtn);
     modeToggleBtn.title = 'Modus wechseln';
@@ -1349,20 +1584,56 @@ const injectConfirmPageButtons = () => {
     modeToggleBtn.onclick = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      deactivateFixedPriceMode(); // Reset fixed mode
       settings.offsetButtonMode = isFixedMode ? 'percentage' : 'fixed';
       document.querySelector('.zero-delay-confirm-controls')?.remove();
       injectConfirmPageButtons();
     };
 
-    // 4. Row Count Cycler (Z)
+    // 4. Fix Button
+    const fixBtn = document.createElement('button');
+    fixBtn.textContent = 'Fix';
+    applyControlStyle(fixBtn);
+    fixBtn.title = 'Preise auf offset Buttons fixieren, Taste: F';
+
+    // Update styling based on state
+    if (isFixedPriceMode) {
+      fixBtn.style.backgroundColor = '#000';
+      fixBtn.style.color = '#fff';
+      fixBtn.style.borderColor = '#000';
+      fixBtn.onmouseenter = () => {
+        fixBtn.style.backgroundColor = '#333';
+        fixBtn.style.borderColor = '#333';
+      };
+      fixBtn.onmouseleave = () => {
+        fixBtn.style.backgroundColor = '#000';
+        fixBtn.style.borderColor = '#000';
+      };
+    }
+
+    fixBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (isFixedPriceMode) {
+        deactivateFixedPriceMode();
+      } else {
+        activateFixedPriceMode('single'); // Confirm page always uses single price
+      }
+
+      document.querySelector('.zero-delay-confirm-controls')?.remove();
+      injectConfirmPageButtons(); // Refresh to show new labels
+    };
+
+    // 5. Row Count Cycler (Z)
     const rowCycleBtn = document.createElement('button');
     rowCycleBtn.textContent = 'Z';
-    rowCycleBtn.style.fontWeight = 'bold';
     applyControlStyle(rowCycleBtn);
     rowCycleBtn.title = 'Zeilenanzahl ändern';
     rowCycleBtn.onclick = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      deactivateFixedPriceMode(); // Reset fixed mode
       settings.offsetButtonCount = cycleButtonCount(settings.offsetButtonCount);
       document.querySelector('.zero-delay-confirm-controls')?.remove();
       injectConfirmPageButtons();
@@ -1395,10 +1666,11 @@ const injectConfirmPageButtons = () => {
       }
     };
 
-    // Append in order: < > €/% Z Speichern
+    // Append in order: < > €/% Fix Z Speichern
     controlRow.appendChild(smallerBtn);
     controlRow.appendChild(largerBtn);
     controlRow.appendChild(modeToggleBtn);
+    controlRow.appendChild(fixBtn);
     controlRow.appendChild(rowCycleBtn);
     controlRow.appendChild(saveBtn);
     group.appendChild(controlRow);
@@ -2042,6 +2314,21 @@ const injectPositionPerformance = async (controlsContainer: HTMLElement, isin: s
 
 // Helper functions for confirm page buttons
 const getCalculatedPrice = (btn: HTMLElement, offset: number, isFixedMode: boolean = false): string => {
+  // In fixed price mode, use the stored fixed price
+  if (isFixedPriceMode) {
+    if (offset === 0 && fixedBasePrice['single']) {
+      return fixedBasePrice['single'];
+    }
+    const key = `${offset >= 0 ? '+' : '-'}${Math.abs(offset)}`;
+    const fixedPrice = fixedOffsetPrices.get(key);
+    if (fixedPrice) {
+      return fixedPrice;
+    }
+    // Fallback if no fixed price found (shouldn't happen)
+    return '0';
+  }
+
+  // Normal mode: calculate from current price
   const controls = btn.closest('.zero-delay-confirm-controls');
   if (!controls) return '0';
 
@@ -2081,11 +2368,16 @@ const formatButtonLabel = (label: string): string => {
 
 const createConfirmBtn = (label: string, offset: number) => {
   const btn = document.createElement('button');
-  btn.textContent = label;
+
+  if (isFixedPriceMode && fixedBasePrice['single']) {
+    btn.textContent = fixedBasePrice['single'].replace('.', ',') + ' als Limit';
+  } else {
+    btn.textContent = label;
+    addTooltipToButton(btn, offset, false);
+  }
+
   btn.className = 'zd-btn zd-btn-primary';
   btn.style.width = '100%';
-
-  addTooltipToButton(btn, offset, false);
 
   btn.onclick = async (e) => {
     e.preventDefault();
@@ -2095,7 +2387,7 @@ const createConfirmBtn = (label: string, offset: number) => {
     if (tooltip) tooltip.style.display = 'none';
     btn.blur();
 
-    const price = getCalculatedPrice(btn, offset, false);
+    const price = getCalculatedPrice(btn, offset, isFixedPriceMode);
 
     const backButton = document.querySelector('a[data-zid="order-mask-back"]') as HTMLElement;
     if (!backButton) return;
@@ -2128,15 +2420,60 @@ const createConfirmBtn = (label: string, offset: number) => {
 
 const createConfirmOffsetBtn = (label: string, offset: number, isFixedMode: boolean = false) => {
   const btn = document.createElement('button');
-  btn.innerHTML = formatButtonLabel(label);
+
+  // Determine label based on fixed price mode
+  let displayLabel: string;
+  let isNegativePrice = false;
+  if (isFixedPriceMode) {
+    // Show absolute price without +/-
+    const key = `${offset >= 0 ? '+' : '-'}${Math.abs(offset)}`;
+    const fixedPrice = fixedOffsetPrices.get(key);
+    if (fixedPrice) {
+      displayLabel = fixedPrice.replace('.', ',');
+    } else {
+      // No fixed price means it was negative and filtered out
+      // Use invisible character to maintain button height
+      displayLabel = '\u200B'; // Zero-width space
+      isNegativePrice = true;
+    }
+  } else {
+    displayLabel = label;
+  }
+
+  btn.innerHTML = formatButtonLabel(displayLabel);
   btn.className = 'zd-btn zd-offset-btn zd-btn-primary';
   btn.setAttribute('data-is-fixed-mode', isFixedMode.toString());
 
-  addTooltipToButton(btn, offset, isFixedMode);
+  // Handle empty (negative) buttons in fixed mode
+  if (isNegativePrice) {
+    btn.style.minHeight = '20px';  // Maintain height even when empty
+    btn.style.opacity = '0.3';     // Visual indication it's disabled
+    btn.style.cursor = 'not-allowed';
+    btn.disabled = true;
+  }
+
+  // Dynamic font sizing for long prices in fixed mode
+  if (isFixedPriceMode && !isNegativePrice) {
+    const digitCount = displayLabel.replace(/[,\s]/g, '').length; // Count digits only
+    if (digitCount > 7) {
+      // Allow button to grow
+      btn.style.width = 'auto';
+    } else if (digitCount > 5) {
+      // Reduce font size to fit
+      btn.style.fontSize = '9px';
+    }
+    // No tooltip in fixed mode
+  } else if (!isNegativePrice) {
+    // Normal mode: show tooltip
+    addTooltipToButton(btn, offset, isFixedMode);
+  }
 
   btn.onclick = async (e) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // Disabled if negative price in fixed mode
+    if (isNegativePrice) return;
 
     const tooltip = document.getElementById('zd-tooltip-el');
     if (tooltip) tooltip.style.display = 'none';
@@ -2673,5 +3010,6 @@ const downloadDocs = async (onlyNew: boolean) => {
 
 // Initialize at end of script
 setTimeout(() => {
+  deactivateFixedPriceMode(); // Always start with Fix mode off
   initPostboxDownloader(settings.postboxDownloaderEnabled);
 }, 1000);
