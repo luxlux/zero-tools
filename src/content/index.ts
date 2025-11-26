@@ -635,6 +635,15 @@ let currentPage: 'order' | 'confirm' | null = null;
 
 // Helper: Activate fixed price mode - freezes current price and calculates all offsets
 const activateFixedPriceMode = (priceType: 'bid' | 'ask' | 'single') => {
+  // NEW: Try to use controller if available
+  const controller = currentPage === 'confirm' ? confirmPageController : orderInputController;
+  if (controller) {
+    controller.activateFixMode(priceType);
+    isFixedPriceMode = true; // Keep old state in sync for now
+    return;
+  }
+
+  // OLD fallback logic (will be removed after migration)
   isFixedPriceMode = true;
   fixedOffsetPrices.clear();
 
@@ -673,6 +682,15 @@ const activateFixedPriceMode = (priceType: 'bid' | 'ask' | 'single') => {
 
 // Helper: Deactivate fixed price mode
 const deactivateFixedPriceMode = () => {
+  // NEW: Try to use controller if available
+  const controller = currentPage === 'confirm' ? confirmPageController : orderInputController;
+  if (controller) {
+    controller.deactivateFixMode();
+    isFixedPriceMode = false; // Keep old state in sync
+    return;
+  }
+
+  // OLD fallback logic
   isFixedPriceMode = false;
   fixedBasePrice = {};
   fixedOffsetPrices.clear();
