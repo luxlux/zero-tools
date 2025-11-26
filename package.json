@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test:ui": "npx -y http-server . -p 8080 -o test-price-buttons.html"
+    "test:ui": "python3 -m http.server 8080 --bind 127.0.0.1 & sleep 1 && open http://127.0.0.1:8080/test-price-buttons.html"
   },
   "dependencies": {
     "clsx": "^2.0.0",
