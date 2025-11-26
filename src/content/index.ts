@@ -621,10 +621,14 @@ const cycleButtonCount = (current: number): number => {
 // Global tooltip update interval
 let tooltipUpdateInterval: number | null = null;
 
-// Fixed price mode state (temporary, not persisted)
+// --- Fix Mode State (OLD - will be replaced by controllers) ---
 let isFixedPriceMode = false;
-let fixedBasePrice: { bid?: string; ask?: string; single?: string } = {};
+let fixedBasePrice: { [key: string]: string } = {};
 let fixedOffsetPrices: Map<string, string> = new Map();
+
+// --- New Architecture: Controller Instances ---
+let orderInputController: PriceButtonController | null = null;
+let confirmPageController: PriceButtonController | null = null;
 let currentPage: 'order' | 'confirm' | null = null;
 
 
