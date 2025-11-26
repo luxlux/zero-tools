@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Price Buttons Test UI</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 1200px;
+      margin: 20px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    .container {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    h2 {
+      margin-top: 0;
+      color: #333;
+      border-bottom: 2px solid #248eff;
+      padding-bottom: 10px;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    label {
+      font-weight: 600;
+      color: #555;
+      font-size: 14px;
+    }
+
+    input,
+    select {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    button {
+      padding: 10px 20px;
+      border: 1px solid #248eff;
+      background: #248eff;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      background: #1a75d6;
+    }
+
+    button.secondary {
+      background: white;
+      color: #248eff;
+    }
+
+    button.secondary:hover {
+      background: #f0f0f0;
+    }
+
+    button.fix-active {
+      background: #000;
+      border-color: #000;
+    }
+
+    .button-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 5px;
+      margin-top: 15px;
+    }
+
+    .test-button {
+      padding: 8px;
+      font-size: 11px;
+      min-width: 60px;
+      text-align: center;
+    }
+
+    .test-button:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .main-button {
+      grid-column: 1 / -1;
+      font-size: 13px;
+      padding: 12px;
+    }
+
+    .output {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 4px;
+      border-left: 4px solid #248eff;
+      margin-top: 10px;
+    }
+
+    .output-item {
+      margin: 5px 0;
+      font-family: 'Courier New', monospace;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: 10px;
+    }
+
+    .status.active {
+      background: #000;
+      color: white;
+    }
+
+    .status.inactive {
+      background: #e0e0e0;
+      color: #666;
+    }
+
+    .info-box {
+      background: #e7f3ff;
+      padding: 12px;
+      border-radius: 4px;
+      margin-top: 15px;
+      border-left: 4px solid #248eff;
+    }
+
+    .error-box {
+      background: #ffe7e7;
+      padding: 12px;
+      border-radius: 4px;
+      border-left: 4px solid #dc3545;
+      color: #721c24;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>🧪 Price Buttons Test UI</h1>
+
+  <div class="container">
+    <div class="info-box">
+      <strong>Hinweis:</strong> Diese Test-Seite funktioniert nur, wenn du einen lokalen Server verwendest:
+      <pre style="background: white; padding: 8px; border-radius: 4px; margin-top: 8px;">cd /Users/lutz/Documents/Web-Entwicklung/zero-tools
+npx http-server -p 8080 -o test-price-buttons.html</pre>
+      Alternativ:
+      <pre
+        style="background: white; padding: 8px; border-radius: 4px; margin-top: 8px;">python3 -m http.server 8080</pre>
+    </div>
+  </div>
+
+  <div class="container">
+    <h2>1. Kurs-Simulation</h2>
+    <div class="controls">
+      <div class="control-group">
+        <label>Bid Kurs:</label>
+        <input type="text" id="bidPrice" value="24110.50">
+      </div>
+      <div class="control-group">
+        <label>Ask Kurs:</label>
+        <input type="text" id="askPrice" value="24112.00">
+      </div>
+      <div class="control-group">
+        <label>Mittelkurs (Single):</label>
+        <input type="text" id="singlePrice" value="24111.25">
+      </div>
+      <div class="control-group">
+        <label>Preis-Typ:</label>
+        <select id="priceType">
+          <option value="bid">Bid</option>
+          <option value="ask">Ask</option>
+          <option value="single" selected>Single</option>
+        </select>
+      </div>
+    </div>
+    <button onclick="updatePrices()">Kurse aktualisieren</button>
+    <button class="secondary" onclick="simulatePriceChange()">📈 Kurs-Änderung simulieren</button>
+  </div>
+
+  <div class="container">
+    <h2>2. Button-Konfiguration</h2>
+    <div class="controls">
+      <div class="control-group">
+        <label>Offset Modus:</label>
+        <select id="offsetMode">
+          <option value="percentage" selected>Prozent</option>
+          <option value="fixed">Fester Betrag (€)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Schritt-Größe:</label>
+        <input type="number" id="offsetStep" value="0.5" step="0.1">
+      </div>
+      <div class="control-group">
+        <label>Anzahl Buttons (pro Seite):</label>
+        <input type="number" id="offsetCount" value="5" min="1" max="10">
+      </div>
+    </div>
+    <button onclick="recreateController()">Konfiguration anwenden</button>
+  </div>
+
+  <div class="container">
+    <h2>3. Fix-Modus
+      <span id="fixStatus" class="status inactive">Inaktiv</span>
+    </h2>
+    <button id="fixToggle" onclick="toggleFixMode()">Fix-Modus aktivieren</button>
+    <div class="info-box" id="fixInfo" style="display:none;">
+      <strong>Fix-Modus aktiv!</strong> Preise sind eingefroren. Ändere die Kurse oben und beobachte, dass die Buttons
+      gleich bleiben.
+    </div>
+  </div>
+
+  <div class="container">
+    <h2>4. Button-Vorschau</h2>
+    <div id="buttonPreview"></div>
+    <div id="errorBox" class="error-box" style="display:none;"></div>
+  </div>
+
+  <div class="container">
+    <h2>5. Ausgabe (Klick-Simulation)</h2>
+    <div class="output">
+      <div class="output-item"><strong>Letzter Klick:</strong> <span id="lastClick">-</span></div>
+      <div class="output-item"><strong>Gesetzter Preis:</strong> <span id="setPrice">-</span></div>
+      <div class="output-item"><strong>Fix-Modus:</strong> <span id="wasFixed">-</span></div>
+    </div>
+  </div>
+
+  <script type="module">
+    // Import from compiled dist
+    import('./dist/content.js').then(module => {
+      // The module exports are in window after loading
+      // We need to access the priceButtons exports
+      console.log('Module loaded, checking exports...');
+
+      // For now, show error and instructions
+      showError('Modul-Import funktioniert noch nicht. Verwende einen lokalen Server (siehe Anleitung oben).');
+    }).catch(err => {
+      showError('Fehler beim Laden: ' + err.message + '. Starte einen lokalen Server (siehe Anleitung oben).');
+    });
+
+    function showError(msg) {
+      const box = document.getElementById('errorBox');
+      box.textContent = msg;
+      box.style.display = 'block';
+    }
+
+    // Make functions global for onclick handlers
+    window.updatePrices = function () {
+      alert('Bitte starte einen lokalen Server - siehe Anleitung oben');
+    };
+
+    window.simulatePriceChange = function () {
+      alert('Bitte starte einen lokalen Server - siehe Anleitung oben');
+    };
+
+    window.recreateController = function () {
+      alert('Bitte starte einen lokalen Server - siehe Anleitung oben');
+    };
+
+    window.toggleFixMode = function () {
+      alert('Bitte starte einen lokalen Server - siehe Anleitung oben');
+    };
+
+    window.handleClick = function () {
+      alert('Bitte starte einen lokalen Server - siehe Anleitung oben');
+    };
+  </script>
+</body>
+
+</html>
