@@ -1484,6 +1484,24 @@ const injectConfirmPageButtons = () => {
   const direction = directionRow?.querySelector('.font-bold')?.textContent?.trim() || '';
   const isBuy = direction === 'Kauf';
 
+  // NEW: Create controller instance for new architecture
+  if (!confirmPageController) {
+    const config = {
+      offsetMode: settings.offsetButtonMode,
+      customOffsets: settings.customOffsets ? settings.customOffsets.split(',').map(v => parseFloat(v.trim())) : undefined,
+      offsetStep: settings.offsetButtonStep,
+      offsetCount: settings.offsetButtonCount,
+      autoCheck: false, // Confirm page doesn't auto-check
+      currentStepSize: settings.offsetButtonStep
+    };
+
+    confirmPageController = new PriceButtonController(
+      new ConfirmPagePriceSource(),
+      new ConfirmPagePriceTarget(),
+      config
+    );
+  }
+
   // Find quote element and extract prices
   const upperDiv = confirmPage.querySelector('.d-flex.justify-content-between.upper');
   if (!upperDiv) return;
