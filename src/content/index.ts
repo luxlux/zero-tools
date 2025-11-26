@@ -1,5 +1,14 @@
 import { Clock, Activity, Zap, Info } from 'lucide-react';
 
+// Import new price buttons architecture
+import {
+  PriceButtonController,
+  OrderInputPriceSource,
+  OrderInputPriceTarget,
+  ConfirmPagePriceSource,
+  ConfirmPagePriceTarget
+} from './features/priceButtons';
+
 declare const chrome: any;
 
 interface Settings {
