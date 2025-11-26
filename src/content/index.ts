@@ -377,6 +377,7 @@ document.addEventListener('keyup', (e) => {
   }
 });
 
+// Expose setLimitValue globally so adapters can use it
 const setLimitValue = (priceStr: string, autoCheck: boolean) => {
   const limitButton = document.querySelector('div[data-zid="limit-order"]') as HTMLElement;
   const limitInputSelector = 'input[data-zid="limit-order-input"]';
@@ -427,6 +428,10 @@ const setLimitValue = (priceStr: string, autoCheck: boolean) => {
     }
   }, 50);
 };
+
+// Expose globally for adapters
+// @ts-ignore
+window.setLimitValue = setLimitValue;
 
 // --- Main Feature Functions ---
 
