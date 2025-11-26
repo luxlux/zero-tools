@@ -860,6 +860,23 @@ const injectLimitButtons = () => {
     }
   }
 
+  // NEW: Create controller instance for new architecture
+  if (!orderInputController) {
+    const config = {
+      offsetMode: settings.offsetButtonMode,
+      customOffsets: settings.customOffsets ? settings.customOffsets.split(',').map(v => parseFloat(v.trim())) : undefined,
+      offsetStep: settings.offsetButtonStep,
+      offsetCount: settings.offsetButtonCount,
+      autoCheck: settings.autoCheckEnabled
+    };
+
+    orderInputController = new PriceButtonController(
+      new OrderInputPriceSource(),
+      new OrderInputPriceTarget(),
+      config
+    );
+  }
+
   // Structural change or first render - recreate buttons
   lastState = {
     bid: bidPriceStr || '',
