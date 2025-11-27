@@ -3,13 +3,16 @@
  * Tracks and displays the latency of price quotes
  */
 
-import { injectLimitButtons, injectLimitAdjuster, injectConfirmPageButtons, injectConfirmPagePerformanceInfo } from '../../index';
+import { injectLimitButtons, injectLimitAdjuster, injectConfirmPageButtons } from '../../index';
+import { injectConfirmPagePerformanceInfo } from '../positionPerformance/PositionPerformance';
 
 interface LatencySettings {
     isActive: boolean;
     latencyMonitorEnabled: boolean;
     warningThreshold: number;
     criticalThreshold: number;
+    confirmPageEnabled: boolean;
+    confirmPagePerformanceInfoEnabled: boolean;
 }
 
 export const parseTime = (timeStr: string): Date | null => {
@@ -181,5 +184,5 @@ export const processTimestamps = (settings: LatencySettings) => {
     injectLimitButtons();
     injectLimitAdjuster();
     injectConfirmPageButtons();
-    injectConfirmPagePerformanceInfo();
+    injectConfirmPagePerformanceInfo(settings);
 };
