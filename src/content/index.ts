@@ -866,7 +866,9 @@ const injectLimitButtons = () => {
   if (!orderInputController) {
     const config = {
       offsetMode: settings.offsetButtonMode,
-      customOffsets: settings.customOffsets ? settings.customOffsets.split(',').map(v => parseFloat(v.trim())) : undefined,
+      customOffsets: settings.customOffsets && settings.customOffsets.trim()
+        ? settings.customOffsets.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v))
+        : undefined,
       offsetStep: settings.offsetButtonStep,
       offsetCount: settings.offsetButtonCount,
       autoCheck: settings.autoCheckEnabled
@@ -1504,7 +1506,9 @@ const injectConfirmPageButtons = () => {
   if (!confirmPageController) {
     const config = {
       offsetMode: settings.offsetButtonMode,
-      customOffsets: settings.customOffsets ? settings.customOffsets.split(',').map(v => parseFloat(v.trim())) : undefined,
+      customOffsets: settings.customOffsets && settings.customOffsets.trim()
+        ? settings.customOffsets.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v))
+        : undefined,
       offsetStep: settings.offsetButtonStep,
       offsetCount: settings.offsetButtonCount,
       autoCheck: false, // Confirm page doesn't auto-check
