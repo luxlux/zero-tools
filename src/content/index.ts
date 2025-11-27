@@ -915,95 +915,6 @@ const injectLimitButtons = () => {
   const isAutoCheck = settings.autoCheckEnabled;
   let originalValue = '';
 
-  const handleTooltip = (btn: HTMLButtonElement, priceType: 'bid' | 'ask' | 'single', offset?: number, isFixedMode?: boolean) => {
-    const updateTooltipContent = () => {
-      const controls = btn.closest('.zero-delay-limit-controls');
-      if (!controls) return null;
-
-      let basePrice = controls.getAttribute(`data-${priceType}`);
-      if (!basePrice) return null;
-
-      let finalPrice = basePrice;
-      if (offset !== undefined) {
-        const base = parseFloat(basePrice);
-        const decimals = Math.max(basePrice.indexOf('.') >= 0 ? basePrice.split('.')[1].length : 2, 4);
-
-        let newPrice: number;
-        if (isFixedMode) {
-          // Fixed mode: add offset directly
-          newPrice = base + offset;
-        } else {
-          // Percentage mode: multiply by (1 + offset/100)
-          newPrice = base * (1 + offset / 100);
-        }
-
-        finalPrice = newPrice.toFixed(decimals);
-      }
-
-      return finalPrice;
-    };
-
-    const formatAndSetTooltip = (tooltip: HTMLElement, priceStr: string) => {
-      const formattedPrice = priceStr.replace('.', ',');
-      const parts = formattedPrice.split(',');
-      if (parts.length === 2 && parts[1].length > 2) {
-        const mainPart = parts[0];
-        const firstTwoDecimals = parts[1].substring(0, 2);
-        const extraDecimals = parts[1].substring(2);
-        tooltip.innerHTML = `${mainPart},${firstTwoDecimals}<span style="opacity: 0.5;">${extraDecimals}</span>`;
-      } else {
-        tooltip.textContent = formattedPrice;
-      }
-    };
-
-    btn.onmouseenter = () => {
-      const priceStr = updateTooltipContent();
-      if (!priceStr) return;
-
-      let tooltip = document.getElementById('zd-tooltip-el');
-      if (!tooltip) {
-        tooltip = document.createElement('div');
-        tooltip.id = 'zd-tooltip-el';
-        tooltip.className = 'zd-tooltip';
-        document.body.appendChild(tooltip);
-      }
-
-      formatAndSetTooltip(tooltip, priceStr);
-      tooltip.style.display = 'block';
-
-      // Clear any existing interval and start new one
-      if (tooltipUpdateInterval) clearInterval(tooltipUpdateInterval);
-      tooltipUpdateInterval = window.setInterval(() => {
-        const currentPrice = updateTooltipContent();
-        if (currentPrice && tooltip && tooltip.style.display !== 'none') {
-          formatAndSetTooltip(tooltip, currentPrice);
-        }
-      }, 100); // Update every 100ms
-    };
-
-    btn.onmousemove = (e) => {
-      const tooltip = document.getElementById('zd-tooltip-el');
-      if (tooltip) {
-        tooltip.style.top = `${e.clientY - 45}px`;
-        tooltip.style.left = `${e.clientX}px`;
-      }
-    };
-
-    btn.onmouseleave = () => {
-      const tooltip = document.getElementById('zd-tooltip-el');
-      if (tooltip) {
-        tooltip.style.display = 'none';
-      }
-      if (tooltipUpdateInterval) {
-        clearInterval(tooltipUpdateInterval);
-        tooltipUpdateInterval = null;
-      }
-    };
-  };
-
-  // Export tooltip handler for adapters to use
-  (window as any).handleTooltip = handleTooltip;
-
   const createBtn = (label: string, priceType: 'bid' | 'ask' | 'single') => {
     // Use adapter to create button
     if (!orderInputAdapter) {
@@ -2260,24 +2171,6 @@ const injectPositionPerformance = async (controlsContainer: HTMLElement, isin: s
 
 // Helper functions for confirm page buttons (getCalculatedPrice removed - using controller directly now)
 
-// Helper to format button label with faint 3rd+ decimal places
-const formatButtonLabel = (label: string): string => {
-  if (label.indexOf(',') === -1) return label;
-
-  // Extract % symbol if present
-  const hasPercent = label.endsWith('%');
-  const numericPart = hasPercent ? label.slice(0, -1) : label;
-
-  const parts = numericPart.split(',');
-  if (parts[1] && parts[1].length > 2) {
-    const mainDecimals = parts[1].substring(0, 2);
-    const faintDecimals = parts[1].substring(2);
-    const formatted = `${parts[0]},${mainDecimals}<span style="opacity: 0.5;">${faintDecimals}</span>`;
-    return hasPercent ? formatted + '%' : formatted;
-  }
-  return label;
-};
-
 const createConfirmBtn = (label: string, offset: number) => {
   // Use adapter to create button (offset 0 = main button)
   if (!confirmPageAdapter) {
@@ -2302,82 +2195,6 @@ const createConfirmOffsetBtn = (label: string, offset: number, isFixedMode: bool
     isFixedMode,
     isFixedPriceMode
   );
-};
-
-const addTooltipToButton = (btn: HTMLButtonElement, offset: number, isFixedMode: boolean = false) => {
-  const updateTooltip = () => {
-    const tooltip = document.getElementById('zd-tooltip-el');
-    if (!tooltip || tooltip.style.display === 'none') return;
-
-    // Get price directly from controller for tooltip display
-    let price: string;
-    if (confirmPageController && isFixedPriceMode) {
-      const buttonInfo = confirmPageController.getButtonDisplayInfo('single', offset);
-      price = buttonInfo.price || '0';
-    } else {
-      // Normal mode: calculate from current price
-      const controls = btn.closest('.zero-delay-confirm-controls');
-      const currentPriceStr = controls?.getAttribute('data-current-price') || '0';
-      const currentPrice = parseFloat(currentPriceStr);
-      const decimals = Math.max(currentPriceStr.indexOf('.') >= 0 ? currentPriceStr.split('.')[1].length : 2, 4);
-
-      const newPrice = isFixedMode
-        ? currentPrice + offset
-        : currentPrice * (1 + offset / 100);
-
-      price = newPrice.toFixed(decimals);
-    }
-
-    const formattedPrice = price.replace('.', ',');
-    const parts = formattedPrice.split(',');
-
-    if (parts.length === 2 && parts[1].length > 2) {
-      const mainPart = parts[0];
-      const firstTwoDecimals = parts[1].substring(0, 2);
-      const extraDecimals = parts[1].substring(2);
-      tooltip.innerHTML = `${mainPart},${firstTwoDecimals}<span style="opacity: 0.5;">${extraDecimals}</span>`;
-    } else {
-      tooltip.textContent = formattedPrice;
-    }
-  };
-
-  btn.onmouseenter = () => {
-    let tooltip = document.getElementById('zd-tooltip-el');
-    if (!tooltip) {
-      tooltip = document.createElement('div');
-      tooltip.id = 'zd-tooltip-el';
-      tooltip.className = 'zd-tooltip';
-      document.body.appendChild(tooltip);
-    }
-    tooltip.style.display = 'block';
-    updateTooltip();
-
-    // Clear any existing interval and start new one (use global interval)
-    if (tooltipUpdateInterval) clearInterval(tooltipUpdateInterval);
-    tooltipUpdateInterval = window.setInterval(() => {
-      updateTooltip();
-    }, 100); // Update every 100ms to catch live price changes
-  };
-
-  btn.onmousemove = (e) => {
-    const tooltip = document.getElementById('zd-tooltip-el');
-    if (tooltip) {
-      tooltip.style.left = e.clientX + 'px';
-      tooltip.style.top = (e.clientY - 45) + 'px';
-    }
-  };
-
-  btn.onmouseleave = () => {
-    const tooltip = document.getElementById('zd-tooltip-el');
-    if (tooltip) {
-      tooltip.style.display = 'none';
-    }
-    // Clear global interval on mouse leave
-    if (tooltipUpdateInterval) {
-      clearInterval(tooltipUpdateInterval);
-      tooltipUpdateInterval = null;
-    }
-  };
 };
 const processTimestamps = () => {
   if (!settings.isActive) {
