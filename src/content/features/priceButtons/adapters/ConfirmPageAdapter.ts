@@ -336,4 +336,21 @@ export class ConfirmPageAdapter {
             isFixedMode: isFixedMode
         });
     }
+    /**
+     * Activate Fix Mode (single price)
+     */
+    activateFixMode(): void {
+        if (this.controller) {
+            this.controller.activateFixMode('single');
+        }
+    }
+
+    /**
+     * Deactivate Fix Mode
+     */
+    deactivateFixMode(): void {
+        if (this.controller) {
+            this.controller.deactivateFixMode();
+        }
+    }
 }

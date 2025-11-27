@@ -265,6 +265,26 @@ export class OrderInputAdapter {
     }
 
     /**
+     * Activate Fix Mode for both Bid and Ask
+     */
+    activateFixMode(): void {
+        if (this.controller) {
+            this.controller.activateFixMode('bid');
+            this.controller.activateFixMode('ask');
+        }
+    }
+
+    /**
+     * Deactivate Fix Mode
+     */
+    deactivateFixMode(): void {
+        if (this.controller) {
+            this.controller.deactivateFixMode();
+        }
+    }
+
+
+    /**
      * Get decimal places from price string
      */
     private getDecimalPlaces(str: string): number {

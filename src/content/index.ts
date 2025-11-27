@@ -636,26 +636,20 @@ let currentPage: 'order' | 'confirm' | null = null;
 
 // Helper: Activate fixed price mode - freezes current price and calculates all offsets
 const activateFixedPriceMode = (priceType: 'bid' | 'ask' | 'single') => {
-  // Use controller - always
-  const controller = currentPage === 'confirm' ? confirmPageController : orderInputController;
-  if (!controller) return;
-
-  // On Order Input page, activate BOTH bid and ask
-  if (currentPage !== 'confirm' && orderInputController) {
-    orderInputController.activateFixMode('bid');
-    orderInputController.activateFixMode('ask');
-  } else {
-    // Confirm page: just the single price type
-    controller.activateFixMode(priceType);
+  if (currentPage === 'confirm' && confirmPageAdapter) {
+    confirmPageAdapter.activateFixMode();
+  } else if (orderInputAdapter) {
+    orderInputAdapter.activateFixMode();
   }
   isFixedPriceMode = true;
 };
 
 // Helper: Deactivate fixed price mode
 const deactivateFixedPriceMode = () => {
-  const controller = currentPage === 'confirm' ? confirmPageController : orderInputController;
-  if (controller) {
-    controller.deactivateFixMode();
+  if (currentPage === 'confirm' && confirmPageAdapter) {
+    confirmPageAdapter.deactivateFixMode();
+  } else if (orderInputAdapter) {
+    orderInputAdapter.deactivateFixMode();
   }
   isFixedPriceMode = false;
 };
@@ -1546,7 +1540,7 @@ const injectConfirmPageButtons = () => {
         const endIdx = Math.min(positiveButtons.length, i + buttonsPerRow);
         for (let j = i; j < endIdx; j++) {
           const btnData = positiveButtons[j];
-          row.appendChild(createConfirmOffsetBtn(btnData.label, btnData.offset, isFixedMode));
+          row.appendChild(confirmPageAdapter.createOffsetButton(btnData.offset, btnData.label, isFixedMode, isFixedPriceMode));
         }
 
         group.appendChild(row);
@@ -1560,7 +1554,7 @@ const injectConfirmPageButtons = () => {
         const startIdx = Math.max(0, i - buttonsPerRow + 1);
         for (let j = startIdx; j <= i; j++) {
           const btnData = positiveButtons[j];
-          row.appendChild(createConfirmOffsetBtn(btnData.label, btnData.offset, isFixedMode));
+          row.appendChild(confirmPageAdapter.createOffsetButton(btnData.offset, btnData.label, isFixedMode, isFixedPriceMode));
         }
 
         group.appendChild(row);
@@ -1571,7 +1565,7 @@ const injectConfirmPageButtons = () => {
   // Main Button
   // Dynamic label based on direction
   const mainButtonLabel = isBuy ? 'Ask als Limit' : 'Bid als Limit';
-  group.appendChild(createConfirmBtn(mainButtonLabel, 0));
+  group.appendChild(confirmPageAdapter.createMainButton(mainButtonLabel, false));
 
   // Offset buttons - negative
   if (settings.offsetButtonsEnabled) {
@@ -1589,7 +1583,7 @@ const injectConfirmPageButtons = () => {
       const endIdx = Math.min(negativeButtons.length, i + buttonsPerRow);
       for (let j = i; j < endIdx; j++) {
         const btnData = negativeButtons[j];
-        row.appendChild(createConfirmOffsetBtn(btnData.label, -btnData.offset, isFixedMode));
+        row.appendChild(confirmPageAdapter.createOffsetButton(-btnData.offset, btnData.label, isFixedMode, isFixedPriceMode));
       }
 
       group.appendChild(row);
@@ -2169,33 +2163,6 @@ const injectPositionPerformance = async (controlsContainer: HTMLElement, isin: s
   }
 };
 
-// Helper functions for confirm page buttons (getCalculatedPrice removed - using controller directly now)
-
-const createConfirmBtn = (label: string, offset: number) => {
-  // Use adapter to create button (offset 0 = main button)
-  if (!confirmPageAdapter) {
-    throw new Error('ConfirmPageAdapter not initialized');
-  }
-
-  return confirmPageAdapter.createMainButton(
-    label,
-    settings.offsetButtonMode === 'fixed'
-  );
-};
-
-const createConfirmOffsetBtn = (label: string, offset: number, isFixedMode: boolean = false) => {
-  // Use adapter to create button
-  if (!confirmPageAdapter) {
-    throw new Error('ConfirmPageAdapter not initialized');
-  }
-
-  return confirmPageAdapter.createOffsetButton(
-    offset,
-    label,
-    isFixedMode,
-    isFixedPriceMode
-  );
-};
 const processTimestamps = () => {
   if (!settings.isActive) {
     removeAllIndicators();
