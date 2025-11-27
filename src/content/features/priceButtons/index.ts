@@ -13,8 +13,8 @@ export { ButtonFactory } from './core/ButtonFactory';
 export type { ButtonConfig } from './core/ButtonFactory';
 
 // Adapters
-export { OrderInputPriceSource, OrderInputPriceTarget } from './adapters/OrderInputAdapter';
-export { ConfirmPagePriceSource, ConfirmPagePriceTarget } from './adapters/ConfirmPageAdapter';
+export { OrderInputPriceSource, OrderInputPriceTarget, OrderInputAdapter } from './adapters/OrderInputAdapter';
+export { ConfirmPagePriceSource, ConfirmPagePriceTarget, ConfirmPageAdapter } from './adapters/ConfirmPageAdapter';
 
 // Utils
 export * from './utils/priceFormatting';
