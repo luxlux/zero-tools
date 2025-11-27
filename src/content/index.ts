@@ -638,9 +638,15 @@ const activateFixedPriceMode = (priceType: 'bid' | 'ask' | 'single') => {
   // NEW: Try to use controller if available
   const controller = currentPage === 'confirm' ? confirmPageController : orderInputController;
   if (controller) {
-    // Get offsets from controller (already stored during creation)
-    const offsets = controller.getOffsetValues();
-    controller.activateFixMode(priceType);
+    // On Order Input page, activate BOTH bid and ask (if available)
+    if (currentPage !== 'confirm' && orderInputController) {
+      // Activate for both bid and ask
+      orderInputController.activateFixMode('bid');
+      orderInputController.activateFixMode('ask');
+    } else {
+      // Confirm page: just the single price type
+      controller.activateFixMode(priceType);
+    }
     isFixedPriceMode = true; // Keep old state in sync for now
     return;
   }
