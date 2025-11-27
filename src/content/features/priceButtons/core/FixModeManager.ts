@@ -40,10 +40,7 @@ export class FixModeManager {
                 : calculateFixedOffset(currentPrice, offset, decimals);
 
             this.fixedData.offsetPrices.set(key, price);
-            console.log('[FixModeManager] Stored:', key, '=', price); // DEBUG
         });
-
-        console.log('[FixModeManager] All keys:', Array.from(this.fixedData.offsetPrices.keys())); // DEBUG
 
         this.isActive = true;
     }
@@ -77,7 +74,6 @@ export class FixModeManager {
 
         const key = `${priceType}:${offset === 0 ? '0' : `${offset >= 0 ? '+' : ''}${offset}`}`;
         const result = this.fixedData.offsetPrices.get(key) || null;
-        console.log('[FixModeManager] getFixedPrice(', offset, priceType, ') -> key:', key, '-> result:', result); // DEBUG
         return result;
     }
 

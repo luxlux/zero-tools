@@ -621,87 +621,39 @@ const cycleButtonCount = (current: number): number => {
 // Global tooltip update interval
 let tooltipUpdateInterval: number | null = null;
 
-// --- Fix Mode State (OLD - will be replaced by controllers) ---
+// OLD Fix Mode state (deprecated - use controllers instead)
 let isFixedPriceMode = false;
-let fixedBasePrice: { [key: string]: string } = {};
-let fixedOffsetPrices: Map<string, string> = new Map();
 
-// --- New Architecture: Controller Instances ---
+// Controller instances (NEW architecture)
 let orderInputController: PriceButtonController | null = null;
 let confirmPageController: PriceButtonController | null = null;
 let currentPage: 'order' | 'confirm' | null = null;
 
 
-
 // Helper: Activate fixed price mode - freezes current price and calculates all offsets
 const activateFixedPriceMode = (priceType: 'bid' | 'ask' | 'single') => {
-  // NEW: Try to use controller if available
+  // Use controller - always
   const controller = currentPage === 'confirm' ? confirmPageController : orderInputController;
-  if (controller) {
-    // On Order Input page, activate BOTH bid and ask (if available)
-    if (currentPage !== 'confirm' && orderInputController) {
-      // Activate for both bid and ask
-      orderInputController.activateFixMode('bid');
-      orderInputController.activateFixMode('ask');
-    } else {
-      // Confirm page: just the single price type
-      controller.activateFixMode(priceType);
-    }
-    isFixedPriceMode = true; // Keep old state in sync for now
-    return;
+  if (!controller) return;
+
+  // On Order Input page, activate BOTH bid and ask
+  if (currentPage !== 'confirm' && orderInputController) {
+    orderInputController.activateFixMode('bid');
+    orderInputController.activateFixMode('ask');
+  } else {
+    // Confirm page: just the single price type
+    controller.activateFixMode(priceType);
   }
-
-  // OLD fallback logic (will be removed after migration)
   isFixedPriceMode = true;
-  fixedOffsetPrices.clear();
-
-  // Store base price - check both Order Input and Confirm page containers
-  const controls = document.querySelector('.zero-delay-limit-controls') || document.querySelector('.zero-delay-confirm-controls');
-  if (!controls) return;
-
-  const basePrice = controls.getAttribute(`data-${priceType}`) || controls.getAttribute('data-current-price');
-  if (!basePrice) return;
-
-  fixedBasePrice[priceType] = basePrice;
-
-  // Calculate and store all offset prices
-  const buttonData = generateOffsetButtonData();
-  const isFixedMode = settings.offsetButtonMode === 'fixed';
-  const base = parseFloat(basePrice);
-  const decimals = basePrice.indexOf('.') >= 0 ? basePrice.split('.')[1].length : 2; // Use actual decimals, not Math.max
-
-  buttonData.forEach(btn => {
-    let newPrice: number;
-    const offset = btn.isPositive ? btn.offset : -btn.offset;
-
-    if (isFixedMode) {
-      newPrice = base + offset;
-    } else {
-      newPrice = base * (1 + offset / 100);
-    }
-
-    // Skip negative prices
-    if (newPrice <= 0) return;
-
-    const key = `${btn.isPositive ? '+' : '-'}${btn.offset}`;
-    fixedOffsetPrices.set(key, newPrice.toFixed(decimals));
-  });
 };
 
 // Helper: Deactivate fixed price mode
 const deactivateFixedPriceMode = () => {
-  // NEW: Try to use controller if available
   const controller = currentPage === 'confirm' ? confirmPageController : orderInputController;
   if (controller) {
     controller.deactivateFixMode();
-    isFixedPriceMode = false; // Keep old state in sync
-    return;
   }
-
-  // OLD fallback logic
   isFixedPriceMode = false;
-  fixedBasePrice = {};
-  fixedOffsetPrices.clear();
 };
 
 /**
@@ -1044,16 +996,8 @@ const injectLimitButtons = () => {
 
     // Show fixed base price or normal label
     let displayText: string;
-    if (isFixedPriceMode) {
-      // NEW: Try to get from controller first
-      if (orderInputController) {
-        displayText = orderInputController.getMainButtonLabel(priceType, label);
-      } else if (fixedBasePrice[priceType]) {
-        // OLD fallback
-        displayText = fixedBasePrice[priceType]!.replace('.', ',') + ' als Limit';
-      } else {
-        displayText = label;
-      }
+    if (isFixedPriceMode && orderInputController) {
+      displayText = orderInputController.getMainButtonLabel(priceType, label);
     } else {
       displayText = label;
     }
@@ -1064,18 +1008,10 @@ const injectLimitButtons = () => {
 
     // Initial state
     if (isAutoCheck || isShiftHeld) {
-      if (isFixedPriceMode && fixedBasePrice[priceType]) {
-        btn.innerHTML = formatButtonLabel(displayText) + ' & Prüfen';
-      } else {
-        btn.textContent = `${displayText} & Prüfen`;
-      }
+      btn.textContent = `${displayText} & Prüfen`;
       btn.classList.add('zd-btn-primary');
     } else {
-      if (isFixedPriceMode && fixedBasePrice[priceType]) {
-        btn.innerHTML = formatButtonLabel(displayText);
-      } else {
-        btn.textContent = displayText;
-      }
+      btn.textContent = displayText;
     }
 
     btn.className = 'zd-btn';
@@ -1102,9 +1038,6 @@ const injectLimitButtons = () => {
         if (orderInputController) {
           const buttonInfo = orderInputController.getButtonDisplayInfo(priceType, 0);
           priceStr = buttonInfo.price && buttonInfo.price !== '0' ? buttonInfo.price : null;
-        } else if (fixedBasePrice[priceType]) {
-          // OLD fallback
-          priceStr = fixedBasePrice[priceType];
         }
       } else {
         // Get current price from container
@@ -1140,24 +1073,10 @@ const injectLimitButtons = () => {
     // Determine label based on fixed price mode
     let displayLabel: string;
     let isNegativePrice = false;
-    if (isFixedPriceMode) {
-      // NEW: Try to get from controller first
-      if (orderInputController) {
-        const buttonInfo = orderInputController.getButtonDisplayInfo(priceType, offset);
-        displayLabel = buttonInfo.label;
-        isNegativePrice = buttonInfo.disabled;
-      } else {
-        // OLD fallback: Show absolute price without +/-
-        const key = `${offset >= 0 ? '+' : '-'}${Math.abs(offset)}`;
-        const fixedPrice = fixedOffsetPrices.get(key);
-        if (fixedPrice) {
-          displayLabel = fixedPrice.replace('.', ',');
-        } else {
-          // No fixed price means it was negative and filtered out
-          displayLabel = '\u200B'; // Zero-width space
-          isNegativePrice = true;
-        }
-      }
+    if (isFixedPriceMode && orderInputController) {
+      const buttonInfo = orderInputController.getButtonDisplayInfo(priceType, offset);
+      displayLabel = buttonInfo.label;
+      isNegativePrice = buttonInfo.disabled;
     } else {
       displayLabel = label;
     }
@@ -1208,14 +1127,10 @@ const injectLimitButtons = () => {
       let priceStr: string | null | undefined;
 
       if (isFixedPriceMode) {
-        // NEW: Get from controller
+        // Get from controller
         if (orderInputController) {
           const buttonInfo = orderInputController.getButtonDisplayInfo(priceType, offset);
           priceStr = buttonInfo.price && buttonInfo.price !== '0' ? buttonInfo.price : null;
-        } else {
-          // OLD fallback
-          const key = `${offset >= 0 ? '+' : '-'}${Math.abs(offset)}`;
-          priceStr = fixedOffsetPrices.get(key) || null;
         }
       } else {
         // Normal mode: calculate from current price
@@ -2461,53 +2376,7 @@ const injectPositionPerformance = async (controlsContainer: HTMLElement, isin: s
   }
 };
 
-// Helper functions for confirm page buttons
-const getCalculatedPrice = (btn: HTMLElement, offset: number, isFixedMode: boolean = false): string => {
-  // In fixed price mode, use the stored fixed price from controller
-  if (isFixedPriceMode) {
-    // Try to get from controller first
-    const controller = currentPage === 'confirm' ? confirmPageController : orderInputController;
-    if (controller) {
-      const priceType = currentPage === 'confirm' ? 'single' : (btn.closest('.zd-bid-controls') ? 'bid' : 'ask');
-      const buttonInfo = controller.getButtonDisplayInfo(priceType as any, offset);
-      console.log('[getCalculatedPrice] Fix mode - priceType:', priceType, 'offset:', offset, 'buttonInfo:', buttonInfo); // DEBUG
-      if (buttonInfo.price && buttonInfo.price !== '0') {
-        return buttonInfo.price;
-      }
-    }
-
-    // OLD fallback (will be removed later)
-    if (offset === 0 && fixedBasePrice['single']) {
-      return fixedBasePrice['single'];
-    }
-    const key = `${offset >= 0 ? '+' : '-'}${Math.abs(offset)}`;
-    const fixedPrice = fixedOffsetPrices.get(key);
-    if (fixedPrice) {
-      return fixedPrice;
-    }
-    // Fallback if no fixed price found (shouldn't happen)
-    return '0';
-  }
-
-  // Normal mode: calculate from current price
-  const controls = btn.closest('.zero-delay-confirm-controls');
-  if (!controls) return '0';
-
-  const basePriceStr = controls.getAttribute('data-current-price') || '0';
-  const decimals = Math.max(parseInt(controls.getAttribute('data-decimals') || '2'), 4);
-  const basePrice = parseFloat(basePriceStr);
-
-  let newPrice: number;
-  if (isFixedMode) {
-    // Fixed mode: add offset directly
-    newPrice = basePrice + offset;
-  } else {
-    // Percentage mode: multiply by (1 + offset/100)
-    newPrice = basePrice * (1 + offset / 100);
-  }
-
-  return newPrice.toFixed(decimals);
-};
+// Helper functions for confirm page buttons (getCalculatedPrice removed - using controller directly now)
 
 // Helper to format button label with faint 3rd+ decimal places
 const formatButtonLabel = (label: string): string => {
@@ -2568,7 +2437,16 @@ const createConfirmBtn = (label: string, offset: number) => {
     if (tooltip) tooltip.style.display = 'none';
     btn.blur();
 
-    let price = getCalculatedPrice(btn, offset, isFixedPriceMode);
+    // Get price directly from controller
+    let price: string;
+    if (confirmPageController && isFixedPriceMode) {
+      const buttonInfo = confirmPageController.getButtonDisplayInfo('single', offset);
+      price = buttonInfo.price || '0';
+    } else {
+      // Normal mode: get from data attribute
+      const controls = btn.closest('.zero-delay-confirm-controls');
+      price = controls?.getAttribute('data-current-price') || '0';
+    }
 
     // Convert German format (comma) to English format (dot) for input field
     price = price.replace(',', '.');
@@ -2655,7 +2533,27 @@ const createConfirmOffsetBtn = (label: string, offset: number, isFixedMode: bool
     if (tooltip) tooltip.style.display = 'none';
     btn.blur();
 
-    const price = getCalculatedPrice(btn, offset, isFixedMode);
+    // Get price directly from controller
+    let price: string;
+    if (confirmPageController && isFixedPriceMode) {
+      const buttonInfo = confirmPageController.getButtonDisplayInfo('single', offset);
+      price = buttonInfo.price || '0';
+    } else {
+      // Normal mode: calculate from current price
+      const controls = btn.closest('.zero-delay-confirm-controls');
+      const currentPriceStr = controls?.getAttribute('data-current-price') || '0';
+      const currentPrice = parseFloat(currentPriceStr);
+      const decimals = Math.max(currentPriceStr.indexOf('.') >= 0 ? currentPriceStr.split('.')[1].length : 2, 4);
+
+      const newPrice = isFixedMode
+        ? currentPrice + offset  // Fixed mode: add offset
+        : currentPrice * (1 + offset / 100);  // Percentage mode
+
+      price = newPrice.toFixed(decimals);
+    }
+
+    // Convert German format (comma) to English format (dot)
+    price = price.replace(',', '.');
 
     const backButton = document.querySelector('a[data-zid="order-mask-back"]') as HTMLElement;
     if (!backButton) return;
@@ -2691,7 +2589,25 @@ const addTooltipToButton = (btn: HTMLButtonElement, offset: number, isFixedMode:
     const tooltip = document.getElementById('zd-tooltip-el');
     if (!tooltip || tooltip.style.display === 'none') return;
 
-    const price = getCalculatedPrice(btn, offset, isFixedMode);
+    // Get price directly from controller for tooltip display
+    let price: string;
+    if (confirmPageController && isFixedPriceMode) {
+      const buttonInfo = confirmPageController.getButtonDisplayInfo('single', offset);
+      price = buttonInfo.price || '0';
+    } else {
+      // Normal mode: calculate from current price
+      const controls = btn.closest('.zero-delay-confirm-controls');
+      const currentPriceStr = controls?.getAttribute('data-current-price') || '0';
+      const currentPrice = parseFloat(currentPriceStr);
+      const decimals = Math.max(currentPriceStr.indexOf('.') >= 0 ? currentPriceStr.split('.')[1].length : 2, 4);
+
+      const newPrice = isFixedMode
+        ? currentPrice + offset
+        : currentPrice * (1 + offset / 100);
+
+      price = newPrice.toFixed(decimals);
+    }
+
     const formattedPrice = price.replace('.', ',');
     const parts = formattedPrice.split(',');
 
