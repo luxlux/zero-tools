@@ -5,8 +5,10 @@ import {
   PriceButtonController,
   OrderInputPriceSource,
   OrderInputPriceTarget,
+  OrderInputAdapter,
   ConfirmPagePriceSource,
-  ConfirmPagePriceTarget
+  ConfirmPagePriceTarget,
+  ConfirmPageAdapter
 } from './features/priceButtons';
 
 declare const chrome: any;
@@ -627,6 +629,8 @@ let isFixedPriceMode = false;
 // Controller instances (NEW architecture)
 let orderInputController: PriceButtonController | null = null;
 let confirmPageController: PriceButtonController | null = null;
+let orderInputAdapter: OrderInputAdapter | null = null;
+let confirmPageAdapter: ConfirmPageAdapter | null = null;
 let currentPage: 'order' | 'confirm' | null = null;
 
 
@@ -840,6 +844,9 @@ const injectLimitButtons = () => {
     }
     // For fixed mode, don't set customOffsets - let generateOffsetValues use row-based calculation
 
+    const priceSource = new OrderInputPriceSource();
+    const priceTarget = new OrderInputPriceTarget();
+
     const config = {
       offsetMode: settings.offsetButtonMode,
       customOffsets: offsets || (settings.customOffsets && settings.customOffsets.trim()
@@ -851,10 +858,13 @@ const injectLimitButtons = () => {
     };
 
     orderInputController = new PriceButtonController(
-      new OrderInputPriceSource(),
-      new OrderInputPriceTarget(),
+      priceSource,
+      priceTarget,
       config
     );
+
+    // Create adapter instance
+    orderInputAdapter = new OrderInputAdapter(orderInputController, priceTarget);
 
     // Track the config to detect changes
     (orderInputController as any)._configKey = controllerKey;
@@ -1485,11 +1495,17 @@ const injectConfirmPageButtons = () => {
       currentStepSize: settings.offsetButtonStep
     };
 
+    const priceSource = new ConfirmPagePriceSource();
+    const priceTarget = new ConfirmPagePriceTarget();
+
     confirmPageController = new PriceButtonController(
-      new ConfirmPagePriceSource(),
-      new ConfirmPagePriceTarget(),
+      priceSource,
+      priceTarget,
       config
     );
+
+    // Create adapter instance
+    confirmPageAdapter = new ConfirmPageAdapter(confirmPageController, priceTarget);
 
     // Track the config to detect changes
     (confirmPageController as any)._configKey = controllerKey;
