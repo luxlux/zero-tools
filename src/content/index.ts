@@ -2470,6 +2470,7 @@ const getCalculatedPrice = (btn: HTMLElement, offset: number, isFixedMode: boole
     if (controller) {
       const priceType = currentPage === 'confirm' ? 'single' : (btn.closest('.zd-bid-controls') ? 'bid' : 'ask');
       const buttonInfo = controller.getButtonDisplayInfo(priceType as any, offset);
+      console.log('[getCalculatedPrice] Fix mode - priceType:', priceType, 'offset:', offset, 'buttonInfo:', buttonInfo); // DEBUG
       if (buttonInfo.price && buttonInfo.price !== '0') {
         return buttonInfo.price;
       }
