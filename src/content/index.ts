@@ -2447,8 +2447,19 @@ const injectPositionPerformance = async (controlsContainer: HTMLElement, isin: s
 
 // Helper functions for confirm page buttons
 const getCalculatedPrice = (btn: HTMLElement, offset: number, isFixedMode: boolean = false): string => {
-  // In fixed price mode, use the stored fixed price
+  // In fixed price mode, use the stored fixed price from controller
   if (isFixedPriceMode) {
+    // Try to get from controller first
+    const controller = currentPage === 'confirm' ? confirmPageController : orderInputController;
+    if (controller) {
+      const priceType = currentPage === 'confirm' ? 'single' : (btn.closest('.zd-bid-controls') ? 'bid' : 'ask');
+      const buttonInfo = controller.getButtonDisplayInfo(priceType as any, offset);
+      if (buttonInfo.price && buttonInfo.price !== '0') {
+        return buttonInfo.price;
+      }
+    }
+
+    // OLD fallback (will be removed later)
     if (offset === 0 && fixedBasePrice['single']) {
       return fixedBasePrice['single'];
     }
