@@ -870,7 +870,13 @@ const injectLimitButtons = () => {
     if (settings.offsetButtonMode === 'percentage') {
       // Use percentage presets - use 'standard' preset
       const preset = PERCENTAGE_PRESETS['standard'];
-      offsets = preset.slice(0, settings.offsetButtonCount / 2); // Half for +, half for -
+      const positiveOffsets = preset.slice(0, settings.offsetButtonCount / 2);
+      // Generate both positive and negative offsets
+      offsets = [];
+      positiveOffsets.forEach(val => {
+        offsets!.push(val);
+        offsets!.push(-val);
+      });
     }
 
     const config = {
@@ -1519,7 +1525,13 @@ const injectConfirmPageButtons = () => {
     if (settings.offsetButtonMode === 'percentage') {
       // Use percentage presets - use 'standard' preset
       const preset = PERCENTAGE_PRESETS['standard'];
-      offsets = preset.slice(0, settings.offsetButtonCount / 2); // Half for +, half for -
+      const positiveOffsets = preset.slice(0, settings.offsetButtonCount / 2);
+      // Generate both positive and negative offsets
+      offsets = [];
+      positiveOffsets.forEach(val => {
+        offsets!.push(val);
+        offsets!.push(-val);
+      });
     }
 
     const config = {
