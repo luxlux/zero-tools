@@ -2455,15 +2455,32 @@ const formatButtonLabel = (label: string): string => {
 
 const createConfirmBtn = (label: string, offset: number) => {
   const btn = document.createElement('button');
+  btn.className = 'zd-btn zd-btn-primary';
 
-  if (isFixedPriceMode && fixedBasePrice['single']) {
-    btn.textContent = fixedBasePrice['single'].replace('.', ',') + ' als Limit';
+  // NEW: Get display text from controller if in Fix mode
+  let displayText: string;
+  let isDisabled = false;
+  if (isFixedPriceMode && confirmPageController) {
+    // Use controller to get fixed price
+    const buttonInfo = confirmPageController.getButtonDisplayInfo('single', offset);
+    displayText = buttonInfo.label || label;
+    if (buttonInfo.disabled) {
+      displayText = '\u200B'; // Empty for negative prices
+      isDisabled = true;
+      btn.disabled = true;
+      btn.style.opacity = '0.3';
+    }
   } else {
-    btn.textContent = label;
+    displayText = label;
+  }
+
+  btn.innerHTML = formatButtonLabel(displayText);
+  btn.setAttribute('data-offset', offset.toString());
+
+  if (!isFixedPriceMode && !isDisabled) {
     addTooltipToButton(btn, offset, false);
   }
 
-  btn.className = 'zd-btn zd-btn-primary';
   btn.style.width = '100%';
 
   btn.onclick = async (e) => {
@@ -2508,21 +2525,13 @@ const createConfirmBtn = (label: string, offset: number) => {
 const createConfirmOffsetBtn = (label: string, offset: number, isFixedMode: boolean = false) => {
   const btn = document.createElement('button');
 
-  // Determine label based on fixed price mode
+  // NEW: Determine label from controller if in Fix mode
   let displayLabel: string;
   let isNegativePrice = false;
-  if (isFixedPriceMode) {
-    // Show absolute price without +/-
-    const key = `${offset >= 0 ? '+' : '-'}${Math.abs(offset)}`;
-    const fixedPrice = fixedOffsetPrices.get(key);
-    if (fixedPrice) {
-      displayLabel = fixedPrice.replace('.', ',');
-    } else {
-      // No fixed price means it was negative and filtered out
-      // Use invisible character to maintain button height
-      displayLabel = '\u200B'; // Zero-width space
-      isNegativePrice = true;
-    }
+  if (isFixedPriceMode && confirmPageController) {
+    const buttonInfo = confirmPageController.getButtonDisplayInfo('single', offset);
+    displayLabel = buttonInfo.label;
+    isNegativePrice = buttonInfo.disabled;
   } else {
     displayLabel = label;
   }
@@ -2549,7 +2558,7 @@ const createConfirmOffsetBtn = (label: string, offset: number, isFixedMode: bool
       // Reduce font size to fit
       btn.style.fontSize = '9px';
     }
-    // No tooltip in fixed mode
+    // NO tooltip in fixed mode
   } else if (!isNegativePrice) {
     // Normal mode: show tooltip
     addTooltipToButton(btn, offset, isFixedMode);
