@@ -2457,18 +2457,21 @@ const createConfirmBtn = (label: string, offset: number) => {
   const btn = document.createElement('button');
   btn.className = 'zd-btn zd-btn-primary';
 
-  // NEW: Get display text from controller if in Fix mode
+  // NEW: Get display text - use getMainButtonLabel for offset 0
   let displayText: string;
-  let isDisabled = false;
   if (isFixedPriceMode && confirmPageController) {
-    // Use controller to get fixed price
-    const buttonInfo = confirmPageController.getButtonDisplayInfo('single', offset);
-    displayText = buttonInfo.label || label;
-    if (buttonInfo.disabled) {
-      displayText = '\u200B'; // Empty for negative prices
-      isDisabled = true;
-      btn.disabled = true;
-      btn.style.opacity = '0.3';
+    if (offset === 0) {
+      // Main button: use getMainButtonLabel (includes "als Limit")
+      displayText = confirmPageController.getMainButtonLabel('single', label);
+    } else {
+      // Offset button: use getButtonDisplayInfo
+      const buttonInfo = confirmPageController.getButtonDisplayInfo('single', offset);
+      displayText = buttonInfo.label || label;
+      if (buttonInfo.disabled) {
+        displayText = '\u200B';
+        btn.disabled = true;
+        btn.style.opacity = '0.3';
+      }
     }
   } else {
     displayText = label;
@@ -2477,7 +2480,7 @@ const createConfirmBtn = (label: string, offset: number) => {
   btn.innerHTML = formatButtonLabel(displayText);
   btn.setAttribute('data-offset', offset.toString());
 
-  if (!isFixedPriceMode && !isDisabled) {
+  if (!isFixedPriceMode) {
     addTooltipToButton(btn, offset, false);
   }
 
