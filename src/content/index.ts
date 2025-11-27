@@ -638,6 +638,8 @@ const activateFixedPriceMode = (priceType: 'bid' | 'ask' | 'single') => {
   // NEW: Try to use controller if available
   const controller = currentPage === 'confirm' ? confirmPageController : orderInputController;
   if (controller) {
+    // Get offsets from controller (already stored during creation)
+    const offsets = controller.getOffsetValues();
     controller.activateFixMode(priceType);
     isFixedPriceMode = true; // Keep old state in sync for now
     return;
@@ -1013,8 +1015,16 @@ const injectLimitButtons = () => {
 
     // Show fixed base price or normal label
     let displayText: string;
-    if (isFixedPriceMode && fixedBasePrice[priceType]) {
-      displayText = fixedBasePrice[priceType]!.replace('.', ',') + ' als Limit';
+    if (isFixedPriceMode) {
+      // NEW: Try to get from controller first
+      if (orderInputController) {
+        displayText = orderInputController.getMainButtonLabel(priceType, label);
+      } else if (fixedBasePrice[priceType]) {
+        // OLD fallback
+        displayText = fixedBasePrice[priceType]!.replace('.', ',') + ' als Limit';
+      } else {
+        displayText = label;
+      }
     } else {
       displayText = label;
     }
@@ -1095,16 +1105,22 @@ const injectLimitButtons = () => {
     let displayLabel: string;
     let isNegativePrice = false;
     if (isFixedPriceMode) {
-      // Show absolute price without +/-
-      const key = `${offset >= 0 ? '+' : '-'}${Math.abs(offset)}`;
-      const fixedPrice = fixedOffsetPrices.get(key);
-      if (fixedPrice) {
-        displayLabel = fixedPrice.replace('.', ',');
+      // NEW: Try to get from controller first
+      if (orderInputController) {
+        const buttonInfo = orderInputController.getButtonDisplayInfo(priceType, offset);
+        displayLabel = buttonInfo.label;
+        isNegativePrice = buttonInfo.disabled;
       } else {
-        // No fixed price means it was negative and filtered out
-        // Use invisible character to maintain button height
-        displayLabel = '\u200B'; // Zero-width space
-        isNegativePrice = true;
+        // OLD fallback: Show absolute price without +/-
+        const key = `${offset >= 0 ? '+' : '-'}${Math.abs(offset)}`;
+        const fixedPrice = fixedOffsetPrices.get(key);
+        if (fixedPrice) {
+          displayLabel = fixedPrice.replace('.', ',');
+        } else {
+          // No fixed price means it was negative and filtered out
+          displayLabel = '\u200B'; // Zero-width space
+          isNegativePrice = true;
+        }
       }
     } else {
       displayLabel = label;
