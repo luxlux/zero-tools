@@ -90,8 +90,9 @@ export class ConfirmPageAdapter {
         label: string,
         isFixedMode: boolean
     ): HTMLButtonElement {
+        // Controller already adds "als Limit" for Confirm page, don't add it again
         const displayText = isFixedMode && this.controller
-            ? this.controller.getMainButtonLabel('single', label) + ' als Limit'
+            ? this.controller.getMainButtonLabel('single', label)
             : label;
 
         const config: ButtonConfig = {

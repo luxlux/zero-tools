@@ -1001,6 +1001,9 @@ const injectLimitButtons = () => {
     };
   };
 
+  // Export tooltip handler for adapters to use
+  (window as any).handleTooltip = handleTooltip;
+
   const createBtn = (label: string, priceType: 'bid' | 'ask' | 'single') => {
     // Use adapter to create button
     if (!orderInputAdapter) {
