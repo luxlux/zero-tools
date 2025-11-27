@@ -1091,8 +1091,15 @@ const injectLimitButtons = () => {
 
       let priceStr: string | null | undefined;
 
-      if (isFixedPriceMode && fixedBasePrice[priceType]) {
-        priceStr = fixedBasePrice[priceType];
+      if (isFixedPriceMode) {
+        // NEW: Get from controller
+        if (orderInputController) {
+          const buttonInfo = orderInputController.getButtonDisplayInfo(priceType, 0);
+          priceStr = buttonInfo.price && buttonInfo.price !== '0' ? buttonInfo.price : null;
+        } else if (fixedBasePrice[priceType]) {
+          // OLD fallback
+          priceStr = fixedBasePrice[priceType];
+        }
       } else {
         // Get current price from container
         const controls = btn.closest('.zero-delay-limit-controls');
@@ -1192,40 +1199,43 @@ const injectLimitButtons = () => {
 
       // In fixed price mode, use the stored fixed price
       let finalPriceStr: string;
+      let priceStr: string | null | undefined;
 
       if (isFixedPriceMode) {
-        const key = `${offset >= 0 ? '+' : '-'}${Math.abs(offset)}`;
-        const fixedPrice = fixedOffsetPrices.get(key);
-        if (fixedPrice) {
-          finalPriceStr = fixedPrice;
+        // NEW: Get from controller
+        if (orderInputController) {
+          const buttonInfo = orderInputController.getButtonDisplayInfo(priceType, offset);
+          priceStr = buttonInfo.price && buttonInfo.price !== '0' ? buttonInfo.price : null;
         } else {
-          // No fixed price (negative), should not happen as button is disabled
-          return;
+          // OLD fallback
+          const key = `${offset >= 0 ? '+' : '-'}${Math.abs(offset)}`;
+          priceStr = fixedOffsetPrices.get(key) || null;
         }
       } else {
         // Normal mode: calculate from current price
         const controls = btn.closest('.zero-delay-limit-controls');
-        const basePriceStr = controls?.getAttribute(`data-${priceType}`);
-        if (!basePriceStr) return;
+        const currentPriceStr = controls?.getAttribute(`data-${priceType}`);
+        if (!currentPriceStr) return;
 
-        const basePrice = parseFloat(basePriceStr);
-        const decimals = Math.max(basePriceStr.indexOf('.') >= 0 ? basePriceStr.split('.')[1].length : 2, 4);
+        const currentPrice = parseFloat(currentPriceStr);
+        const decimals = getDecimalPlacesFromPreset(settings.offsetButtonStep);
 
-        let newPrice: number;
         if (isFixedMode) {
           // Fixed mode: add offset directly
-          newPrice = basePrice + offset;
+          const newPrice = currentPrice + offset;
+          priceStr = newPrice.toFixed(decimals);
         } else {
-          // Percentage mode: multiply by (1 + offset/100)
-          newPrice = basePrice * (1 + offset / 100);
+          // Percentage mode
+          const newPrice = currentPrice * (1 + offset / 100);
+          priceStr = newPrice.toFixed(decimals);
         }
-
-        finalPriceStr = newPrice.toFixed(decimals);
       }
+
+      if (!priceStr) return;
 
       try {
         if (chrome.runtime?.id) {
-          setLimitValue(finalPriceStr, isAutoCheck || e.shiftKey);
+          setLimitValue(priceStr, isAutoCheck || e.shiftKey);
         }
       } catch (err) {
         console.warn('Zero Tools: Extension context invalidated. Please reload the page.');
