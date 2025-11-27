@@ -2276,191 +2276,29 @@ const formatButtonLabel = (label: string): string => {
 };
 
 const createConfirmBtn = (label: string, offset: number) => {
-  const btn = document.createElement('button');
-  btn.className = 'zd-btn zd-btn-primary';
-
-  // NEW: Get display text - use getMainButtonLabel for offset 0
-  let displayText: string;
-  if (isFixedPriceMode && confirmPageController) {
-    if (offset === 0) {
-      // Main button: use getMainButtonLabel (includes "als Limit")
-      displayText = confirmPageController.getMainButtonLabel('single', label);
-    } else {
-      // Offset button: use getButtonDisplayInfo
-      const buttonInfo = confirmPageController.getButtonDisplayInfo('single', offset);
-      displayText = buttonInfo.label || label;
-      if (buttonInfo.disabled) {
-        displayText = '\u200B';
-        btn.disabled = true;
-        btn.style.opacity = '0.3';
-      }
-    }
-  } else {
-    displayText = label;
+  // Use adapter to create button (offset 0 = main button)
+  if (!confirmPageAdapter) {
+    throw new Error('ConfirmPageAdapter not initialized');
   }
 
-  btn.innerHTML = formatButtonLabel(displayText);
-  btn.setAttribute('data-offset', offset.toString());
-
-  if (!isFixedPriceMode) {
-    addTooltipToButton(btn, offset, false);
-  }
-
-  btn.style.width = '100%';
-
-  btn.onclick = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const tooltip = document.getElementById('zd-tooltip-el');
-    if (tooltip) tooltip.style.display = 'none';
-    btn.blur();
-
-    // Get price directly from controller
-    let price: string;
-    if (confirmPageController && isFixedPriceMode) {
-      const buttonInfo = confirmPageController.getButtonDisplayInfo('single', offset);
-      price = buttonInfo.price || '0';
-    } else {
-      // Normal mode: get from data attribute
-      const controls = btn.closest('.zero-delay-confirm-controls');
-      price = controls?.getAttribute('data-current-price') || '0';
-    }
-
-    // Convert German format (comma) to English format (dot) for input field
-    price = price.replace(',', '.');
-
-    const backButton = document.querySelector('a[data-zid="order-mask-back"]') as HTMLElement;
-    if (!backButton) return;
-
-    backButton.click();
-    await waitForElement('trade-create-quote', 3000);
-
-    let input = document.querySelector('input[data-zid="limit-order-input"]') as HTMLInputElement;
-
-    if (!input) {
-      const limitButton = document.querySelector('div[data-zid="limit-order"]') as HTMLElement;
-      if (limitButton) {
-        limitButton.click();
-        await waitForElement('input[data-zid="limit-order-input"]', 1000);
-      }
-    }
-
-    try {
-      if (chrome.runtime?.id) {
-        chrome.storage.local.set({ 'zd_just_updated': true });
-      }
-    } catch (e) {
-      console.warn('Zero Tools: Extension context invalidated. Please reload the page.');
-    }
-    setLimitValue(price, true);
-  };
-
-  return btn;
+  return confirmPageAdapter.createMainButton(
+    label,
+    settings.offsetButtonMode === 'fixed'
+  );
 };
 
 const createConfirmOffsetBtn = (label: string, offset: number, isFixedMode: boolean = false) => {
-  const btn = document.createElement('button');
-
-  // NEW: Determine label from controller if in Fix mode
-  let displayLabel: string;
-  let isNegativePrice = false;
-  if (isFixedPriceMode && confirmPageController) {
-    const buttonInfo = confirmPageController.getButtonDisplayInfo('single', offset);
-    displayLabel = buttonInfo.label;
-    isNegativePrice = buttonInfo.disabled;
-  } else {
-    displayLabel = label;
+  // Use adapter to create button
+  if (!confirmPageAdapter) {
+    throw new Error('ConfirmPageAdapter not initialized');
   }
 
-  btn.innerHTML = formatButtonLabel(displayLabel);
-  btn.className = 'zd-btn zd-offset-btn zd-btn-primary';
-  btn.setAttribute('data-is-fixed-mode', isFixedMode.toString());
-
-  // Handle empty (negative) buttons in fixed mode
-  if (isNegativePrice) {
-    btn.style.minHeight = '20px';  // Maintain height even when empty
-    btn.style.opacity = '0.3';     // Visual indication it's disabled
-    btn.style.cursor = 'not-allowed';
-    btn.disabled = true;
-  }
-
-  // Dynamic font sizing for long prices in fixed mode
-  if (isFixedPriceMode && !isNegativePrice) {
-    const digitCount = displayLabel.replace(/[,\s]/g, '').length; // Count digits only
-    if (digitCount > 7) {
-      // Allow button to grow
-      btn.style.width = 'auto';
-    } else if (digitCount > 5) {
-      // Reduce font size to fit
-      btn.style.fontSize = '9px';
-    }
-    // NO tooltip in fixed mode
-  } else if (!isNegativePrice) {
-    // Normal mode: show tooltip
-    addTooltipToButton(btn, offset, isFixedMode);
-  }
-
-  btn.onclick = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Disabled if negative price in fixed mode
-    if (isNegativePrice) return;
-
-    const tooltip = document.getElementById('zd-tooltip-el');
-    if (tooltip) tooltip.style.display = 'none';
-    btn.blur();
-
-    // Get price directly from controller
-    let price: string;
-    if (confirmPageController && isFixedPriceMode) {
-      const buttonInfo = confirmPageController.getButtonDisplayInfo('single', offset);
-      price = buttonInfo.price || '0';
-    } else {
-      // Normal mode: calculate from current price
-      const controls = btn.closest('.zero-delay-confirm-controls');
-      const currentPriceStr = controls?.getAttribute('data-current-price') || '0';
-      const currentPrice = parseFloat(currentPriceStr);
-      const decimals = Math.max(currentPriceStr.indexOf('.') >= 0 ? currentPriceStr.split('.')[1].length : 2, 4);
-
-      const newPrice = isFixedMode
-        ? currentPrice + offset  // Fixed mode: add offset
-        : currentPrice * (1 + offset / 100);  // Percentage mode
-
-      price = newPrice.toFixed(decimals);
-    }
-
-    // Convert German format (comma) to English format (dot)
-    price = price.replace(',', '.');
-
-    const backButton = document.querySelector('a[data-zid="order-mask-back"]') as HTMLElement;
-    if (!backButton) return;
-
-    backButton.click();
-    await waitForElement('trade-create-quote', 3000);
-
-    let input = document.querySelector('input[data-zid="limit-order-input"]') as HTMLInputElement;
-
-    if (!input) {
-      const limitButton = document.querySelector('div[data-zid="limit-order"]') as HTMLElement;
-      if (limitButton) {
-        limitButton.click();
-        await waitForElement('input[data-zid="limit-order-input"]', 1000);
-      }
-    }
-
-    try {
-      if (chrome.runtime?.id) {
-        chrome.storage.local.set({ 'zd_just_updated': true });
-      }
-    } catch (e) {
-      console.warn('Zero Tools: Extension context invalidated. Please reload the page.');
-    }
-    setLimitValue(price, true);
-  };
-
-  return btn;
+  return confirmPageAdapter.createOffsetButton(
+    offset,
+    label,
+    isFixedMode,
+    isFixedPriceMode
+  );
 };
 
 const addTooltipToButton = (btn: HTMLButtonElement, offset: number, isFixedMode: boolean = false) => {
