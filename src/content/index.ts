@@ -864,11 +864,21 @@ const injectLimitButtons = () => {
 
   // NEW: Create controller instance for new architecture
   if (!orderInputController) {
+    // Generate custom offsets based on mode to match old generateOffsetButtonData
+    let offsets: number[] | undefined = undefined;
+
+    if (settings.offsetButtonMode === 'percentage') {
+      // Use percentage presets
+      const presetKey = findNearestPercentagePreset(settings.customOffsets);
+      const preset = PERCENTAGE_PRESETS[presetKey] || PERCENTAGE_PRESETS['standard'];
+      offsets = preset.slice(0, settings.offsetButtonCount / 2); // Half for +, half for -
+    }
+
     const config = {
       offsetMode: settings.offsetButtonMode,
-      customOffsets: settings.customOffsets && settings.customOffsets.trim()
+      customOffsets: offsets || (settings.customOffsets && settings.customOffsets.trim()
         ? settings.customOffsets.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v))
-        : undefined,
+        : undefined),
       offsetStep: settings.offsetButtonStep,
       offsetCount: settings.offsetButtonCount,
       autoCheck: settings.autoCheckEnabled
@@ -1504,11 +1514,21 @@ const injectConfirmPageButtons = () => {
 
   // NEW: Create controller instance for new architecture
   if (!confirmPageController) {
+    // Generate custom offsets based on mode to match old generateOffsetButtonData
+    let offsets: number[] | undefined = undefined;
+
+    if (settings.offsetButtonMode === 'percentage') {
+      // Use percentage presets
+      const presetKey = findNearestPercentagePreset(settings.customOffsets);
+      const preset = PERCENTAGE_PRESETS[presetKey] || PERCENTAGE_PRESETS['standard'];
+      offsets = preset.slice(0, settings.offsetButtonCount / 2); // Half for +, half for -
+    }
+
     const config = {
       offsetMode: settings.offsetButtonMode,
-      customOffsets: settings.customOffsets && settings.customOffsets.trim()
+      customOffsets: offsets || (settings.customOffsets && settings.customOffsets.trim()
         ? settings.customOffsets.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v))
-        : undefined,
+        : undefined),
       offsetStep: settings.offsetButtonStep,
       offsetCount: settings.offsetButtonCount,
       autoCheck: false, // Confirm page doesn't auto-check
