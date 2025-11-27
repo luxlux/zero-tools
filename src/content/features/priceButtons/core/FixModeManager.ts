@@ -24,14 +24,16 @@ export class FixModeManager {
         // Store base price
         this.fixedData.basePrice[priceType] = currentPrice;
 
-        // Calculate and store all offset prices
+        // Calculate and store all offset prices with priceType prefix
         const decimals = getDecimals(currentPrice);
 
-        this.fixedData.offsetPrices.clear();
-        this.fixedData.offsetPrices.set('0', currentPrice); // Main button (offset 0)
+        // DON'T clear - we want to keep prices for other priceTypes (bid vs ask)
+        // Store main button (offset 0) with priceType prefix
+        this.fixedData.offsetPrices.set(`${priceType}:0`, currentPrice);
 
         offsets.forEach(offset => {
-            const key = `${offset >= 0 ? '+' : ''}${offset}`;
+            // Use priceType prefix to separate bid/ask prices
+            const key = `${priceType}:${offset >= 0 ? '+' : ''}${offset}`;
 
             const price = offsetMode === 'percentage'
                 ? calculatePercentageOffset(currentPrice, offset, decimals)
@@ -65,16 +67,17 @@ export class FixModeManager {
     }
 
     /**
-     * Get fixed price for a specific offset
+     * Get fixed price for a specific offset and price type
      * @param offset - Offset value (0 for main button)
+     * @param priceType - Price type (bid/ask/single)
      * @returns Fixed price string or null
      */
-    getFixedPrice(offset: number): string | null {
+    getFixedPrice(offset: number, priceType: PriceType): string | null {
         if (!this.isActive) return null;
 
-        const key = offset === 0 ? '0' : `${offset >= 0 ? '+' : ''}${offset}`;
+        const key = `${priceType}:${offset === 0 ? '0' : `${offset >= 0 ? '+' : ''}${offset}`}`;
         const result = this.fixedData.offsetPrices.get(key) || null;
-        console.log('[FixModeManager] getFixedPrice(', offset, ') -> key:', key, '-> result:', result); // DEBUG
+        console.log('[FixModeManager] getFixedPrice(', offset, priceType, ') -> key:', key, '-> result:', result); // DEBUG
         return result;
     }
 

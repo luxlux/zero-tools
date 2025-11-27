@@ -74,7 +74,7 @@ export class PriceButtonController {
 
         if (this.fixManager.isFixModeActive()) {
             // Fixed price mode
-            const fixedPrice = this.fixManager.getFixedPrice(offset);
+            const fixedPrice = this.fixManager.getFixedPrice(offset, priceType);
             if (!fixedPrice) {
                 return { label: '', disabled: true, opacity: 0.3, price: '0' };
             }
@@ -150,7 +150,7 @@ export class PriceButtonController {
             // Use fixed price
             const fixedPrice = offset === 0
                 ? this.fixManager.getFixedBasePrice(priceType)
-                : this.fixManager.getFixedPrice(offset);
+                : this.fixManager.getFixedPrice(offset, priceType);
 
             if (!fixedPrice) return;
             price = fixedPrice;
