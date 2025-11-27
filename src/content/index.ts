@@ -1002,70 +1002,18 @@ const injectLimitButtons = () => {
   };
 
   const createBtn = (label: string, priceType: 'bid' | 'ask' | 'single') => {
-    const btn = document.createElement('button');
-
-    // Show fixed base price or normal label
-    let displayText: string;
-    if (isFixedPriceMode && orderInputController) {
-      displayText = orderInputController.getMainButtonLabel(priceType, label);
-    } else {
-      displayText = label;
+    // Use adapter to create button
+    if (!orderInputAdapter) {
+      throw new Error('OrderInputAdapter not initialized');
     }
 
-    // IMPORTANT: Use displayText for data-original-text so updateUIState doesn't override it
-    btn.setAttribute('data-original-text', displayText);
-    btn.setAttribute('data-price-type', priceType);
-
-    // Initial state
-    if (isAutoCheck || isShiftHeld) {
-      btn.textContent = `${displayText} & Prüfen`;
-      btn.classList.add('zd-btn-primary');
-    } else {
-      btn.textContent = displayText;
-    }
-
-    btn.className = 'zd-btn';
-    btn.style.width = '100%';
-
-    // No tooltip in fixed mode
-    if (!isFixedPriceMode) {
-      handleTooltip(btn, priceType);
-    }
-
-    btn.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const tooltip = document.getElementById('zd-tooltip-el');
-      if (tooltip) tooltip.style.display = 'none';
-
-      btn.blur(); // Remove focus outline
-
-      let priceStr: string | null | undefined;
-
-      if (isFixedPriceMode) {
-        // NEW: Get from controller
-        if (orderInputController) {
-          const buttonInfo = orderInputController.getButtonDisplayInfo(priceType, 0);
-          priceStr = buttonInfo.price && buttonInfo.price !== '0' ? buttonInfo.price : null;
-        }
-      } else {
-        // Get current price from container
-        const controls = btn.closest('.zero-delay-limit-controls');
-        priceStr = controls?.getAttribute(`data-${priceType}`);
-      }
-
-      if (!priceStr) return;
-
-      try {
-        if (chrome.runtime?.id) {
-          setLimitValue(priceStr, isAutoCheck || e.shiftKey);
-        }
-      } catch (err) {
-        console.warn('Zero Tools: Extension context invalidated. Please reload the page.');
-      }
-    };
-    return btn;
+    return orderInputAdapter.createMainButton(
+      priceType as 'bid' | 'ask',
+      label,
+      isFixedPriceMode,
+      isAutoCheck,
+      isShiftHeld
+    );
   };
 
   const getDecimals = (str: string) => {
@@ -1074,105 +1022,20 @@ const injectLimitButtons = () => {
   };
 
   const createOffsetBtn = (priceType: 'bid' | 'ask' | 'single', offset: number, label: string, isFixedMode: boolean) => {
-    const btn = document.createElement('button');
-    btn.setAttribute('data-original-text', label);
-    btn.setAttribute('data-price-type', priceType);
-    btn.setAttribute('data-offset', offset.toString());
-    btn.setAttribute('data-is-fixed-mode', isFixedMode.toString());
-
-    // Determine label based on fixed price mode
-    let displayLabel: string;
-    let isNegativePrice = false;
-    if (isFixedPriceMode && orderInputController) {
-      const buttonInfo = orderInputController.getButtonDisplayInfo(priceType, offset);
-      displayLabel = buttonInfo.label;
-      isNegativePrice = buttonInfo.disabled;
-    } else {
-      displayLabel = label;
+    // Use adapter to create button
+    if (!orderInputAdapter) {
+      throw new Error('OrderInputAdapter not initialized');
     }
 
-    // Initial state
-    if (isAutoCheck || isShiftHeld) {
-      btn.classList.add('zd-btn-primary');
-    }
-    btn.innerHTML = formatButtonLabel(displayLabel);
-
-    btn.className = 'zd-btn zd-offset-btn';
-
-    // Handle empty (negative) buttons in fixed mode
-    if (isNegativePrice) {
-      btn.style.minHeight = '20px';  // Maintain height even when empty
-      btn.style.opacity = '0.3';     // Visual indication it's disabled
-      btn.style.cursor = 'not-allowed';
-      btn.disabled = true;
-    }
-
-    // Dynamic font sizing for long prices in fixed mode
-    if (isFixedPriceMode) {
-      const digitCount = displayLabel.replace(/[,\s]/g, '').length; // Count digits only
-      if (digitCount > 7) {
-        // Allow button to grow
-        btn.style.width = 'auto';
-      } else if (digitCount > 5) {
-        // Reduce font size to fit
-        btn.style.fontSize = '9px';
-      }
-      // No tooltip in fixed mode
-    } else {
-      // Normal mode: show tooltip
-      handleTooltip(btn, priceType, offset, isFixedMode);
-    }
-
-    btn.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const tooltip = document.getElementById('zd-tooltip-el');
-      if (tooltip) tooltip.style.display = 'none';
-
-      btn.blur();
-
-      // In fixed price mode, use the stored fixed price
-      let finalPriceStr: string;
-      let priceStr: string | null | undefined;
-
-      if (isFixedPriceMode) {
-        // Get from controller
-        if (orderInputController) {
-          const buttonInfo = orderInputController.getButtonDisplayInfo(priceType, offset);
-          priceStr = buttonInfo.price && buttonInfo.price !== '0' ? buttonInfo.price : null;
-        }
-      } else {
-        // Normal mode: calculate from current price
-        const controls = btn.closest('.zero-delay-limit-controls');
-        const currentPriceStr = controls?.getAttribute(`data-${priceType}`);
-        if (!currentPriceStr) return;
-
-        const currentPrice = parseFloat(currentPriceStr);
-        const decimals = getDecimalPlacesFromPreset(settings.offsetButtonStep);
-
-        if (isFixedMode) {
-          // Fixed mode: add offset directly
-          const newPrice = currentPrice + offset;
-          priceStr = newPrice.toFixed(decimals);
-        } else {
-          // Percentage mode
-          const newPrice = currentPrice * (1 + offset / 100);
-          priceStr = newPrice.toFixed(decimals);
-        }
-      }
-
-      if (!priceStr) return;
-
-      try {
-        if (chrome.runtime?.id) {
-          setLimitValue(priceStr, isAutoCheck || e.shiftKey);
-        }
-      } catch (err) {
-        console.warn('Zero Tools: Extension context invalidated. Please reload the page.');
-      }
-    };
-    return btn;
+    return orderInputAdapter.createOffsetButton(
+      priceType as 'bid' | 'ask',
+      offset,
+      label,
+      isFixedMode,
+      isFixedPriceMode,
+      isAutoCheck,
+      isShiftHeld
+    );
   };
 
   const createPriceGroup = (label: string, priceType: 'bid' | 'ask' | 'single') => {
