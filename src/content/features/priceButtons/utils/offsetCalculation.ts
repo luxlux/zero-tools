@@ -64,10 +64,33 @@ export const generateOffsetValues = (
 
     const values: number[] = [];
 
-    for (let i = 1; i <= count; i++) {
-        const value = step * i;
-        values.push(value);   // Positive
-        values.push(-value);  // Negative
+    if (mode === 'fixed') {
+        // Fixed mode uses row-based calculation to match old UI
+        const buttonsPerRow = 5;
+        const rows = count / 10; // Each 10 buttons = 1 row per side
+
+        // Positive buttons
+        for (let row = 1; row <= rows; row++) {
+            for (let col = 1; col <= buttonsPerRow; col++) {
+                const value = step * ((row - 1) * buttonsPerRow + col);
+                values.push(value);
+            }
+        }
+
+        // Negative buttons
+        for (let row = 1; row <= rows; row++) {
+            for (let col = 1; col <= buttonsPerRow; col++) {
+                const value = step * ((row - 1) * buttonsPerRow + col);
+                values.push(-value);
+            }
+        }
+    } else {
+        // Percentage mode: simple linear
+        for (let i = 1; i <= count; i++) {
+            const value = step * i;
+            values.push(value);   // Positive
+            values.push(-value);  // Negative
+        }
     }
 
     return values;
