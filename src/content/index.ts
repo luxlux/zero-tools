@@ -2568,7 +2568,10 @@ const createConfirmBtn = (label: string, offset: number) => {
     if (tooltip) tooltip.style.display = 'none';
     btn.blur();
 
-    const price = getCalculatedPrice(btn, offset, isFixedPriceMode);
+    let price = getCalculatedPrice(btn, offset, isFixedPriceMode);
+
+    // Convert German format (comma) to English format (dot) for input field
+    price = price.replace(',', '.');
 
     const backButton = document.querySelector('a[data-zid="order-mask-back"]') as HTMLElement;
     if (!backButton) return;
