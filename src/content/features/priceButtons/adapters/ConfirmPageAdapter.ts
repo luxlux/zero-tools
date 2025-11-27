@@ -98,6 +98,7 @@ export class ConfirmPageAdapter {
             type: 'main',
             label: displayText,
             priceType: 'single',
+            isAutoCheck: true,  // Confirm buttons always auto-check (navigate + set + check)
             onClick: async (e) => await this.handleMainButtonClick(e, isFixedMode)
         };
 
@@ -137,6 +138,7 @@ export class ConfirmPageAdapter {
             label: displayLabel,
             priceType: 'single',
             offset: offset,
+            isAutoCheck: true,  // Confirm buttons always auto-check
             isDisabled: isNegativePrice,
             className: 'zd-btn zd-offset-btn',
             onClick: async (e) => await this.handleOffsetButtonClick(e, offset, isFixedModeEnabled, isFixedPriceMode)
