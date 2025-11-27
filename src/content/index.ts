@@ -868,9 +868,8 @@ const injectLimitButtons = () => {
     let offsets: number[] | undefined = undefined;
 
     if (settings.offsetButtonMode === 'percentage') {
-      // Use percentage presets
-      const presetKey = findNearestPercentagePreset(settings.customOffsets);
-      const preset = PERCENTAGE_PRESETS[presetKey] || PERCENTAGE_PRESETS['standard'];
+      // Use percentage presets - use 'standard' preset
+      const preset = PERCENTAGE_PRESETS['standard'];
       offsets = preset.slice(0, settings.offsetButtonCount / 2); // Half for +, half for -
     }
 
@@ -1518,9 +1517,8 @@ const injectConfirmPageButtons = () => {
     let offsets: number[] | undefined = undefined;
 
     if (settings.offsetButtonMode === 'percentage') {
-      // Use percentage presets
-      const presetKey = findNearestPercentagePreset(settings.customOffsets);
-      const preset = PERCENTAGE_PRESETS[presetKey] || PERCENTAGE_PRESETS['standard'];
+      // Use percentage presets - use 'standard' preset
+      const preset = PERCENTAGE_PRESETS['standard'];
       offsets = preset.slice(0, settings.offsetButtonCount / 2); // Half for +, half for -
     }
 
