@@ -7,8 +7,10 @@
 export * from './core/types';
 
 // Core classes
-export { FixModeManager } from './core/FixModeManager';
 export { PriceButtonController } from './core/PriceButtonController';
+export { FixModeManager } from './core/FixModeManager';
+export { ButtonFactory } from './core/ButtonFactory';
+export type { ButtonConfig } from './core/ButtonFactory';
 
 // Adapters
 export { OrderInputPriceSource, OrderInputPriceTarget } from './adapters/OrderInputAdapter';
@@ -17,3 +19,6 @@ export { ConfirmPagePriceSource, ConfirmPagePriceTarget } from './adapters/Confi
 // Utils
 export * from './utils/priceFormatting';
 export * from './utils/offsetCalculation';
+
+// Types
+export type { PriceSource, PriceTarget, PriceType, ButtonDisplayInfo } from './core/types';
