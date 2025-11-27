@@ -863,7 +863,9 @@ const injectLimitButtons = () => {
   }
 
   // NEW: Create controller instance for new architecture
-  if (!orderInputController) {
+  // Recreate if mode or step changed
+  const controllerKey = `${settings.offsetButtonMode}-${settings.offsetButtonStep}-${settings.offsetButtonCount}`;
+  if (!orderInputController || (orderInputController as any)._configKey !== controllerKey) {
     // Generate custom offsets based on mode to match old generateOffsetButtonData
     let offsets: number[] | undefined = undefined;
 
@@ -878,6 +880,7 @@ const injectLimitButtons = () => {
         offsets!.push(-val);
       });
     }
+    // For fixed mode, don't set customOffsets - let generateOffsetValues use row-based calculation
 
     const config = {
       offsetMode: settings.offsetButtonMode,
@@ -894,6 +897,9 @@ const injectLimitButtons = () => {
       new OrderInputPriceTarget(),
       config
     );
+
+    // Track the config to detect changes
+    (orderInputController as any)._configKey = controllerKey;
   }
 
   // Structural change or first render - recreate buttons
@@ -1518,7 +1524,9 @@ const injectConfirmPageButtons = () => {
   const isBuy = direction === 'Kauf';
 
   // NEW: Create controller instance for new architecture
-  if (!confirmPageController) {
+  // Recreate if mode or step changed
+  const controllerKey = `${settings.offsetButtonMode}-${settings.offsetButtonStep}-${settings.offsetButtonCount}`;
+  if (!confirmPageController || (confirmPageController as any)._configKey !== controllerKey) {
     // Generate custom offsets based on mode to match old generateOffsetButtonData
     let offsets: number[] | undefined = undefined;
 
@@ -1533,6 +1541,7 @@ const injectConfirmPageButtons = () => {
         offsets!.push(-val);
       });
     }
+    // For fixed mode, don't set customOffsets - let generateOffsetValues use row-based calculation
 
     const config = {
       offsetMode: settings.offsetButtonMode,
@@ -1550,6 +1559,9 @@ const injectConfirmPageButtons = () => {
       new ConfirmPagePriceTarget(),
       config
     );
+
+    // Track the config to detect changes
+    (confirmPageController as any)._configKey = controllerKey;
   }
 
   // Find quote element and extract prices
